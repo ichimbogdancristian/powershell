@@ -156,10 +156,10 @@ function Copy-ProfileFiles {
     Copy-Item -Path "$sourceDir\Microsoft.PowerShell_profile.ps1" -Destination $PROFILE -Force
     Write-Success "✓ Profile copied to: $PROFILE"
     
-    # Copy takuya theme if exists
-    if (Test-Path "$sourceDir\takuya.omp.json") {
-        Copy-Item -Path "$sourceDir\takuya.omp.json" -Destination $profileDir -Force
-        Write-Success "✓ Takuya theme copied"
+    # Copy thecyberden theme if exists
+    if (Test-Path "$sourceDir\thecyberden.omp.json") {
+        Copy-Item -Path "$sourceDir\thecyberden.omp.json" -Destination $profileDir -Force
+        Write-Success "✓ TheCyberden theme copied"
     }
     
     # Copy modules if they exist

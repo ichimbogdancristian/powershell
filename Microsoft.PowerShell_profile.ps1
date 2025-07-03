@@ -73,13 +73,13 @@ if ($env:TERM_PROGRAM -eq "vscode") {
     $env:POSH_DISABLE_ANIMATIONS = $true
 }
 
-# Initialize Oh My Posh with takuya theme
-$ohMyPoshTheme = Join-Path $PSScriptRoot "takuya.omp.json"
+# Initialize Oh My Posh with thecyberden theme
+$ohMyPoshTheme = Join-Path $PSScriptRoot "thecyberden.omp.json"
 if (Test-Path $ohMyPoshTheme) {
     oh-my-posh init pwsh --config $ohMyPoshTheme | Invoke-Expression
 } else {
     # Fallback to a built-in theme
-    oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\takuya.omp.json" | Invoke-Expression
+    oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\thecyberden.omp.json" | Invoke-Expression
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════

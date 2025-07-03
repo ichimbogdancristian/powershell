@@ -80,10 +80,10 @@
 ## ⚙️ Customization
 
 ### Custom Theme
-Edit `takuya.omp.json` to customize your Oh My Posh theme:
+Edit `thecyberden.omp.json` to customize your Oh My Posh theme:
 
 ```powershell
-oh-my-posh init pwsh --config .\takuya.omp.json --print
+oh-my-posh init pwsh --config .\thecyberden.omp.json --print
 ```
 
 ### Adding Custom Functions
