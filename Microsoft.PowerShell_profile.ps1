@@ -100,6 +100,7 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
 
 # File and Directory Operations
 Set-Alias -Name ll -Value Get-ChildItemColorized
+Set-Alias -Name lld -Value Get-ChildItemDetailed  # Detailed view without colors
 Set-Alias -Name la -Value Get-ChildItemAll
 Set-Alias -Name l -Value Get-ChildItem
 Set-Alias -Name ls -Value Get-ChildItem
@@ -825,33 +826,16 @@ function Get-ChildItemColorized {
         [string]$Path = "."
     )
     
-    # Show detailed info first
-    Write-Host "`nDetailed view:" -ForegroundColor DarkGray
-    Get-ChildItem -Path $Path -Force | Format-Table -AutoSize @{
-        Name = 'Mode'; Expression = { $_.Mode }
-    }, @{
-        Name = 'LastWriteTime'; Expression = { $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm') }
-    }, @{
-        Name = 'Length'; Expression = { 
-            if ($_.PSIsContainer) { 
-                '<DIR>' 
-            } else { 
-                Format-FileSize $_.Length 
-            }
-        }
-    }, @{
-        Name = 'Name'; Expression = { 
-            if ($_.PSIsContainer) { 
-                "$($_.Name)/" 
-            } else { 
-                $_.Name 
-            }
-        }
-    }
-    
-    # Then show colorized view
-    Write-Host "Colorized view:" -ForegroundColor DarkGray
+    # Just show the colorized view with Terminal-Icons
     Get-ChildItem -Path $Path -Force
+    
+    # Add a summary line
+    $items = Get-ChildItem -Path $Path -Force
+    $dirs = ($items | Where-Object { $_.PSIsContainer }).Count
+    $files = ($items | Where-Object { -not $_.PSIsContainer }).Count
+    Write-Host ""
+    Write-Host "Summary: " -ForegroundColor DarkGray -NoNewline
+    Write-Host "$dirs directories, $files files" -ForegroundColor Cyan
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
