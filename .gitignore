@@ -1,0 +1,32 @@
+# PowerShell Profile .gitignore
+
+# Backup files
+*.backup
+*.backup.*
+*.bak
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# OS specific files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Personal configurations that shouldn't be shared
+personal-config.ps1
+local-settings.ps1
+
+# Log files
+*.log
+
+# VSCode settings (optional - uncomment if you don't want to share)
+# .vscode/
+
+# Windows specific
+$RECYCLE.BIN/
+
+# PowerShell specific
+*.ps1xml
