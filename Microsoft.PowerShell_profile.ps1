@@ -554,7 +554,7 @@ function Get-Size {
 }
 
 # Extract archives
-function Extract-Archive {
+function Expand-ArchiveFile {
     param(
         [string]$Path,
         [string]$Destination = "."
@@ -694,7 +694,7 @@ Set-Alias -Name unbookmark -Value Remove-Bookmark
 
 # Set aliases for new functions
 Set-Alias -Name size -Value Get-Size
-Set-Alias -Name extract -Value Extract-Archive
+Set-Alias -Name extract -Value Expand-ArchiveFile
 Set-Alias -Name serve -Value Start-HttpServer
 Set-Alias -Name weather -Value Get-Weather
 Set-Alias -Name b64encode -Value ConvertTo-Base64
