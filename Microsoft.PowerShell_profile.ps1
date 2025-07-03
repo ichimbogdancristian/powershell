@@ -380,10 +380,13 @@ function Edit-Profile {
 }
 
 # Reload profile
-function Reload-Profile {
+function Invoke-ProfileReload {
     . $PROFILE
     Write-Host "Profile reloaded!" -ForegroundColor Green
 }
+
+# Create alias for backward compatibility
+Set-Alias -Name reload-profile -Value Invoke-ProfileReload
 
 # Show path in a readable format
 function Show-Path {
@@ -675,7 +678,7 @@ function Set-Bookmark {
 }
 
 # Go to bookmark
-function Go-Bookmark {
+function Invoke-BookmarkNavigation {
     param(
         [string]$Name
     )
@@ -716,7 +719,7 @@ function Remove-Bookmark {
 
 # Set aliases for bookmark functions
 Set-Alias -Name bookmark -Value Set-Bookmark
-Set-Alias -Name go -Value Go-Bookmark
+Set-Alias -Name go -Value Invoke-BookmarkNavigation
 Set-Alias -Name bookmarks -Value Get-Bookmarks
 Set-Alias -Name unbookmark -Value Remove-Bookmark
 
