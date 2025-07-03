@@ -19,11 +19,17 @@ Import-Module Terminal-Icons -Force
 
 # Enable advanced history search
 Set-PSReadLineOption -PredictionSource History
-Set-PSReadLineOption -PredictionViewStyle ListView
+# Use different prediction styles based on environment
+if ($env:TERM_PROGRAM -eq "vscode") {
+    Set-PSReadLineOption -PredictionViewStyle InlineView  # Less intrusive in VS Code
+    Set-PSReadLineOption -CompletionQueryItems 50  # Reduced for better performance
+} else {
+    Set-PSReadLineOption -PredictionViewStyle ListView  # Full list view in regular PowerShell
+    Set-PSReadLineOption -CompletionQueryItems 100
+}
 Set-PSReadLineOption -EditMode Windows
 
 # Advanced completion behavior
-Set-PSReadLineOption -CompletionQueryItems 100
 Set-PSReadLineOption -MaximumHistoryCount 4000
 Set-PSReadLineOption -HistorySearchCursorMovesToEnd
 
@@ -61,6 +67,12 @@ Set-PSReadLineKeyHandler -Key Ctrl+y -Function Redo
 # Oh My Posh Configuration
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# VS Code optimizations
+if ($env:TERM_PROGRAM -eq "vscode") {
+    # Disable Oh My Posh animations in VS Code for better performance
+    $env:POSH_DISABLE_ANIMATIONS = $true
+}
+
 # Initialize Oh My Posh with takuya theme
 $ohMyPoshTheme = Join-Path $PSScriptRoot "takuya.omp.json"
 if (Test-Path $ohMyPoshTheme) {
@@ -87,7 +99,7 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # File and Directory Operations
-Set-Alias -Name ll -Value Get-ChildItemDetailed
+Set-Alias -Name ll -Value Get-ChildItemColorized
 Set-Alias -Name la -Value Get-ChildItemAll
 Set-Alias -Name l -Value Get-ChildItem
 Set-Alias -Name ls -Value Get-ChildItem
@@ -142,6 +154,8 @@ function Get-ChildItemDetailed {
     param(
         [string]$Path = "."
     )
+    
+    # First show the detailed table view
     Get-ChildItem -Path $Path -Force | Format-Table -AutoSize @{
         Name = 'Mode'; Expression = { $_.Mode }
     }, @{
@@ -422,27 +436,41 @@ Register-ArgumentCompleter -CommandName Set-Location -ParameterName Path -Script
 function Show-WelcomeMessage {
     $health = Test-SystemHealth
     
-    Write-Host ""
-    Write-Host "╭─────────────────────────────────────────────────────────╮" -ForegroundColor Magenta
-    Write-Host "│             PowerShell Enhanced Profile                 │" -ForegroundColor Magenta
-    Write-Host "├─────────────────────────────────────────────────────────┤" -ForegroundColor Magenta
-    Write-Host "│ Welcome back, $env:USERNAME! " -ForegroundColor Cyan -NoNewline
-    Write-Host "$(Get-Date -Format 'yyyy-MM-dd HH:mm')" -ForegroundColor Yellow
-    Write-Host "│ Current Location: $(Get-Location)" -ForegroundColor Cyan
-    Write-Host "│ System Health:" -ForegroundColor Cyan
-    Write-Host "│   CPU: " -ForegroundColor Cyan -NoNewline
-    Write-Host "$($health.CPU.Value)%" -ForegroundColor $health.CPU.Color -NoNewline
-    Write-Host " │ Memory: " -ForegroundColor Cyan -NoNewline
-    Write-Host "$($health.Memory.Value)%" -ForegroundColor $health.Memory.Color -NoNewline
-    Write-Host " │ Disk: " -ForegroundColor Cyan -NoNewline
-    Write-Host "$($health.Disk.Value)%" -ForegroundColor $health.Disk.Color
-    Write-Host "╰─────────────────────────────────────────────────────────╯" -ForegroundColor Magenta
-    Write-Host ""
-    Write-Host "Available commands: ll, la, neofetch, df, free, uptime, health, reload-profile" -ForegroundColor DarkGray
-    Write-Host "Use 'z <directory>' for smart navigation | Git shortcuts: g, gs, ga, gc, gp, gst" -ForegroundColor DarkGray
-    Write-Host "Enhanced: copyf, cdd, size, extract, serve, weather, ff, search, bookmarks" -ForegroundColor DarkGray
-    Write-Host "Bookmarks: bookmark <name>, go <name>, bookmarks, unbookmark <name>" -ForegroundColor DarkGray
-    Write-Host ""
+    # Show compact welcome message if in VS Code
+    if ($env:TERM_PROGRAM -eq "vscode") {
+        Write-Host ""
+        Write-Host "┌─── PowerShell Enhanced Profile (VS Code) ───┐" -ForegroundColor Blue
+        Write-Host "│ Welcome, $env:USERNAME! $(Get-Date -Format 'HH:mm')" -ForegroundColor Cyan
+        Write-Host "│ Location: $(Split-Path (Get-Location) -Leaf)" -ForegroundColor Cyan
+        Write-Host "│ Health: CPU $($health.CPU.Value)% | Memory $($health.Memory.Value)% | Disk $($health.Disk.Value)%" -ForegroundColor Cyan
+        Write-Host "└─────────────────────────────────────────────┘" -ForegroundColor Blue
+        Write-Host ""
+        Write-Host "Commands: ll, neofetch, health, c (code), settings | help-profile for more" -ForegroundColor DarkGray
+        Write-Host ""
+    } else {
+        # Show full welcome message for regular PowerShell
+        Write-Host ""
+        Write-Host "╭─────────────────────────────────────────────────────────╮" -ForegroundColor Magenta
+        Write-Host "│             PowerShell Enhanced Profile                 │" -ForegroundColor Magenta
+        Write-Host "├─────────────────────────────────────────────────────────┤" -ForegroundColor Magenta
+        Write-Host "│ Welcome back, $env:USERNAME! " -ForegroundColor Cyan -NoNewline
+        Write-Host "$(Get-Date -Format 'yyyy-MM-dd HH:mm')" -ForegroundColor Yellow
+        Write-Host "│ Current Location: $(Get-Location)" -ForegroundColor Cyan
+        Write-Host "│ System Health:" -ForegroundColor Cyan
+        Write-Host "│   CPU: " -ForegroundColor Cyan -NoNewline
+        Write-Host "$($health.CPU.Value)%" -ForegroundColor $health.CPU.Color -NoNewline
+        Write-Host " │ Memory: " -ForegroundColor Cyan -NoNewline
+        Write-Host "$($health.Memory.Value)%" -ForegroundColor $health.Memory.Color -NoNewline
+        Write-Host " │ Disk: " -ForegroundColor Cyan -NoNewline
+        Write-Host "$($health.Disk.Value)%" -ForegroundColor $health.Disk.Color
+        Write-Host "╰─────────────────────────────────────────────────────────╯" -ForegroundColor Magenta
+        Write-Host ""
+        Write-Host "Available commands: ll, la, neofetch, df, free, uptime, health, reload-profile" -ForegroundColor DarkGray
+        Write-Host "Use 'z <directory>' for smart navigation | Git shortcuts: g, gs, ga, gc, gp, gst" -ForegroundColor DarkGray
+        Write-Host "Enhanced: copyf, cdd, size, extract, serve, weather, ff, search, bookmarks" -ForegroundColor DarkGray
+        Write-Host "Bookmarks: bookmark <name>, go <name>, bookmarks, unbookmark <name>" -ForegroundColor DarkGray
+        Write-Host ""
+    }
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -787,3 +815,66 @@ function Get-ProfileHelp {
 
 Set-Alias -Name help-profile -Value Get-ProfileHelp
 Set-Alias -Name commands -Value Get-ProfileHelp
+
+# Enhanced ls with colors and details (preserves Terminal-Icons colors)
+function Get-ChildItemColorized {
+    param(
+        [string]$Path = "."
+    )
+    
+    # Show detailed info first
+    Write-Host "`nDetailed view:" -ForegroundColor DarkGray
+    Get-ChildItem -Path $Path -Force | Format-Table -AutoSize @{
+        Name = 'Mode'; Expression = { $_.Mode }
+    }, @{
+        Name = 'LastWriteTime'; Expression = { $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm') }
+    }, @{
+        Name = 'Length'; Expression = { 
+            if ($_.PSIsContainer) { 
+                '<DIR>' 
+            } else { 
+                Format-FileSize $_.Length 
+            }
+        }
+    }, @{
+        Name = 'Name'; Expression = { 
+            if ($_.PSIsContainer) { 
+                "$($_.Name)/" 
+            } else { 
+                $_.Name 
+            }
+        }
+    }
+    
+    # Then show colorized view
+    Write-Host "Colorized view:" -ForegroundColor DarkGray
+    Get-ChildItem -Path $Path -Force
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VS Code Specific Functions (only loaded when in VS Code)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if ($env:TERM_PROGRAM -eq "vscode") {
+    # VS Code specific functions
+    function Open-InCode {
+        param([string]$Path = ".")
+        code $Path
+    }
+    
+    function Open-Settings {
+        code $env:APPDATA\Code\User\settings.json
+    }
+    
+    function Open-Keybindings {
+        code $env:APPDATA\Code\User\keybindings.json
+    }
+    
+    # Set aliases for VS Code functions
+    Set-Alias -Name c -Value Open-InCode
+    Set-Alias -Name settings -Value Open-Settings
+    Set-Alias -Name keybindings -Value Open-Keybindings
+    
+    Write-Host "VS Code optimizations loaded!" -ForegroundColor Green
+    Write-Host "Additional commands: c (open in code), settings, keybindings" -ForegroundColor DarkGray
+}
