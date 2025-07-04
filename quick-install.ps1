@@ -4,7 +4,7 @@
 # One-liner installer for PowerShell enhanced profile
 # ═══════════════════════════════════════════════════════════════════════════════
 
-param([switch]$Silent, [switch]$Verbose)
+param([switch]$Silent, [switch]$Verbose, [switch]$CleanInstall)
 
 # Configure output preferences
 if ($Silent) { 
@@ -22,6 +22,8 @@ function Log($msg, $type="INFO") {
         "WARN" { "Yellow" } 
         "ERROR" { "Red" }
         "STEP" { "Cyan" }
+        "INFO" { "White" }
+        "CLEAN" { "Magenta" }
         default { "White" }
     }
     
@@ -31,8 +33,120 @@ function Log($msg, $type="INFO") {
     }
 }
 
+# Function to get all PowerShell profile directories
+function Get-PowerShellProfileDirs {
+    $documentsPath = [Environment]::GetFolderPath("MyDocuments")
+    $profileDirs = @()
+    
+    # PowerShell Core (7+) directory
+    $coreDir = "$documentsPath\PowerShell"
+    if ((Get-Command pwsh -ErrorAction SilentlyContinue) -or (Test-Path "$env:ProgramFiles\PowerShell\*\pwsh.exe")) {
+        $profileDirs += @{
+            Path = $coreDir
+            Name = "PowerShell Core (7+)"
+            ProfileFile = "$coreDir\Microsoft.PowerShell_profile.ps1"
+            Version = "Core"
+        }
+    }
+    
+    # Windows PowerShell (5.1) directory
+    $winDir = "$documentsPath\WindowsPowerShell"
+    if ((Get-Command powershell -ErrorAction SilentlyContinue) -or (Test-Path "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe")) {
+        $profileDirs += @{
+            Path = $winDir
+            Name = "Windows PowerShell (5.1)"
+            ProfileFile = "$winDir\Microsoft.PowerShell_profile.ps1"
+            Version = "Desktop"
+        }
+    }
+    
+    return $profileDirs
+}
+
+# Function to clean old profile installations
+function Clear-OldProfiles {
+    param($ProfileDirs)
+    
+    Log "Cleaning old profile installations..." "CLEAN"
+    
+    foreach ($profileDir in $ProfileDirs) {
+        $path = $profileDir.Path
+        $name = $profileDir.Name
+        
+        if (Test-Path $path) {
+            Log "Cleaning $name directory: $path" "CLEAN"
+            
+            # Create backup first
+            $backupPath = "$path\backup-before-clean-$(Get-Date -Format 'yyyy-MM-dd-HHmmss')"
+            try {
+                if (Test-Path $profileDir.ProfileFile) {
+                    New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
+                    Copy-Item $profileDir.ProfileFile "$backupPath\Microsoft.PowerShell_profile.ps1.bak" -Force
+                    Log "Backed up existing profile to: $backupPath" "OK"
+                }
+            } catch {
+                Log "Warning: Could not backup existing profile" "WARN"
+            }
+            
+            # Remove old files but keep backups
+            try {
+                # Remove profile
+                if (Test-Path $profileDir.ProfileFile) {
+                    Remove-Item $profileDir.ProfileFile -Force
+                    Log "Removed old profile from $name" "OK"
+                }
+                
+                # Remove theme files
+                Get-ChildItem "$path\*.json" -ErrorAction SilentlyContinue | Remove-Item -Force
+                Log "Removed old theme files from $name" "OK"
+                
+                # Remove old modules (but preserve user-installed ones)
+                $modulesPath = "$path\Modules"
+                if (Test-Path $modulesPath) {
+                    $knownModules = @('posh-git', 'Terminal-Icons', 'PSReadLine')
+                    foreach ($module in $knownModules) {
+                        $modulePath = "$modulesPath\$module"
+                        if (Test-Path $modulePath) {
+                            Remove-Item $modulePath -Recurse -Force -ErrorAction SilentlyContinue
+                            Log "Removed old $module module from $name" "OK"
+                        }
+                    }
+                }
+                
+                # Remove any installation temp files
+                Get-ChildItem "$path\temp-*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+                Get-ChildItem "$path\install-*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+                
+            } catch {
+                Log "Warning: Some files could not be removed from $name - $($_.Exception.Message)" "WARN"
+            }
+        } else {
+            Log "$name directory doesn't exist, will be created" "INFO"
+        }
+    }
+}
+
 try {
     Log "Starting PowerShell profile installation..." "STEP"
+    Log "Script location: $PSScriptRoot" "INFO"
+    Log "Current PowerShell version: $($PSVersionTable.PSVersion)" "INFO"
+    
+    # Get all PowerShell directories
+    $allProfileDirs = Get-PowerShellProfileDirs
+    if ($allProfileDirs.Count -eq 0) {
+        Log "No PowerShell installations found!" "ERROR"
+        throw "No PowerShell installations detected"
+    }
+    
+    Log "Found $($allProfileDirs.Count) PowerShell installation(s):" "INFO"
+    foreach ($dir in $allProfileDirs) {
+        Log "  - $($dir.Name): $($dir.Path)" "INFO"
+    }
+    
+    # Clean old installations if requested or if this is a fresh install
+    if ($CleanInstall -or -not (Test-Path $allProfileDirs[0].ProfileFile)) {
+        Clear-OldProfiles -ProfileDirs $allProfileDirs
+    }
     
     # Set execution policy
     Log "Setting execution policy to RemoteSigned..." "STEP"
@@ -74,11 +188,11 @@ try {
             if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
                 Log "Installing $($tool.name)..." "INFO"
                 try {
-                    $null = winget install $tool.id --silent --accept-source-agreements --accept-package-agreements 2>&1
-                    if ($LASTEXITCODE -eq 0) {
+                    $process = Start-Process winget -ArgumentList "install", $tool.id, "--silent", "--accept-source-agreements", "--accept-package-agreements" -Wait -PassThru -NoNewWindow
+                    if ($process.ExitCode -eq 0) {
                         Log "$($tool.name) installed successfully" "OK"
                     } else {
-                        Log "$($tool.name) installation may have issues (exit code: $LASTEXITCODE)" "WARN"
+                        Log "$($tool.name) installation may have issues (exit code: $($process.ExitCode))" "WARN"
                     }
                 } catch {
                     Log "Failed to install $($tool.name) - $($_.Exception.Message)" "ERROR"
@@ -87,365 +201,142 @@ try {
                 Log "$($tool.name) already available" "OK"
             }
         }
+        
+        # Refresh environment to pick up new tools
+        Log "Refreshing environment variables..." "INFO"
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
     } else {
         Log "winget not available - skipping tool installation" "WARN"
     }
 
-    # Setup profile
-    Log "Setting up PowerShell profile..." "STEP"
+    # Install profile for each PowerShell version
+    Log "Installing profile for all PowerShell versions..." "STEP"
     
-    # Detect correct PowerShell profile directory for both PowerShell versions
-    $profileDir = Split-Path $PROFILE -Parent
-    $psVersion = $PSVersionTable.PSVersion.Major
-    
-    # For PowerShell Core (7+), ensure we use the correct directory
-    if ($psVersion -ge 7) {
-        $coreProfileDir = Split-Path $PROFILE -Parent
-        $winPSProfileDir = $coreProfileDir -replace 'PowerShell$', 'WindowsPowerShell'
+    foreach ($profileDir in $allProfileDirs) {
+        $targetPath = $profileDir.Path
+        $targetName = $profileDir.Name
+        $targetProfile = $profileDir.ProfileFile
         
-        # If this script is being run from Windows PowerShell but we want PowerShell Core compatibility
-        if ($profileDir -like "*WindowsPowerShell*") {
-            $profileDir = $coreProfileDir
-            Log "Detected PowerShell Core environment - using PowerShell directory" "INFO"
-        }
-    }
-    
-    Log "Profile directory: $profileDir" "INFO"
-    Log "PowerShell version: $($PSVersionTable.PSVersion)" "INFO"
-    
-    # Check if user has existing PowerShell configurations
-    $hasExistingConfig = $false
-    $existingThemes = @()
-    $existingScripts = @()
-    
-    if (Test-Path $profileDir) {
-        # Check for existing oh-my-posh themes
-        $themeFiles = Get-ChildItem "$profileDir\*.json" -ErrorAction SilentlyContinue
-        if ($themeFiles) {
-            $existingThemes = $themeFiles.Name
-            $hasExistingConfig = $true
-            Log "Found existing oh-my-posh themes: $($existingThemes -join ', ')" "INFO"
+        Log "Installing profile for $targetName..." "INFO"
+        
+        # Create profile directory if it doesn't exist
+        if (-not (Test-Path $targetPath)) { 
+            Log "Creating profile directory for $targetName..." "INFO"
+            New-Item -ItemType Directory -Path $targetPath -Force | Out-Null 
+            Log "Profile directory created: $targetPath" "OK"
         }
         
-        # Check for existing custom scripts
-        $scriptFiles = Get-ChildItem "$profileDir\*.ps1" -Exclude "Microsoft.PowerShell_profile.ps1" -ErrorAction SilentlyContinue
-        if ($scriptFiles) {
-            $existingScripts = $scriptFiles.Name
-            $hasExistingConfig = $true
-            Log "Found existing PowerShell scripts: $($existingScripts -join ', ')" "INFO"
-        }
-    }
-    
-    if (-not (Test-Path $profileDir)) { 
-        Log "Creating profile directory..." "INFO"
-        New-Item -ItemType Directory -Path $profileDir -Force | Out-Null 
-        Log "Profile directory created" "OK"
-    }
-    
-    # Create comprehensive backup if existing configuration found
-    if ($hasExistingConfig) {
-        $backupDir = "$profileDir\backup-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
-        Log "Creating backup of existing configuration..." "INFO"
-        New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-        
-        # Backup existing profile
-        if (Test-Path $PROFILE) {
-            Copy-Item $PROFILE "$backupDir\Microsoft.PowerShell_profile.ps1.bak" -ErrorAction SilentlyContinue
-        }
-        
-        # Backup existing themes and scripts
-        foreach ($theme in $existingThemes) {
-            Copy-Item "$profileDir\$theme" "$backupDir\$theme" -ErrorAction SilentlyContinue
-        }
-        foreach ($script in $existingScripts) {
-            Copy-Item "$profileDir\$script" "$backupDir\$script" -ErrorAction SilentlyContinue
-        }
-        
-        Log "Backup created at: $backupDir" "OK"
-    } else {
-        # Standard backup for just the profile
-        if (Test-Path $PROFILE) { 
-            Log "Backing up existing profile..." "INFO"
-            Copy-Item $PROFILE "$PROFILE.bak" -ErrorAction SilentlyContinue 
-            Log "Profile backed up to $PROFILE.bak" "OK"
-        }
-    }
-    
-    # Copy files
-    Log "Copying profile files..." "STEP"
-    $filesToCopy = @("Microsoft.PowerShell_profile.ps1","oh-my-posh-default.json","verify-theme.ps1")
-    foreach ($file in $filesToCopy) {
-        $src = "$PSScriptRoot\$file"
-        $dst = if($file -like "*.ps1"){$PROFILE}else{"$profileDir\$file"}
-        
-        # Special handling for oh-my-posh theme files
-        if ($file -like "*.json" -and $hasExistingConfig) {
-            # Don't overwrite existing theme if user has custom themes
-            if ($existingThemes -contains $file) {
-                Log "Skipping $file - user has existing theme (backed up)" "INFO"
-                continue
-            } else {
-                # Copy with a different name to avoid conflicts
-                $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file)
-                $extension = [System.IO.Path]::GetExtension($file)
-                $dst = "$profileDir\$baseName-default$extension"
-                Log "Copying $file as $baseName-default$extension to avoid conflicts..." "INFO"
-            }
-        } else {
-            Log "Copying $file..." "INFO"
-        }
-        
-        if (Test-Path $src) { 
+        # Copy main profile file
+        $profileSrc = "$PSScriptRoot\Microsoft.PowerShell_profile.ps1"
+        if (Test-Path $profileSrc) {
             try {
                 # Use UTF8 encoding for PowerShell files to preserve emojis
-                if ($file -like "*.ps1") {
-                    $content = Get-Content $src -Raw -Encoding UTF8
-                    [System.IO.File]::WriteAllText($dst, $content, [System.Text.Encoding]::UTF8)
-                } else {
-                    # For JSON and other files, preserve exact content
-                    Copy-Item $src $dst -Force -ErrorAction Stop
-                }
-                Log "Copied $file successfully" "OK"
+                $content = Get-Content $profileSrc -Raw -Encoding UTF8
+                [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
+                Log "Profile copied to $targetName successfully" "OK"
             } catch {
-                Log "Failed to copy $file - $($_.Exception.Message)" "ERROR"
-            }
-        } else { 
-            Log "Source file not found: $src" "WARN" 
-        }
-    }
-    
-    # Ensure Oh My Posh theme is available for cross-platform installations
-    Log "Ensuring Oh My Posh theme availability across PowerShell versions..." "STEP"
-    $themeFile = "oh-my-posh-default.json"
-    $themeSrc = "$PSScriptRoot\$themeFile"
-    
-    if (Test-Path $themeSrc) {
-        # Copy theme to both PowerShell directories if they exist
-        $allProfileDirs = @($profileDir)
-        
-        # Add other PowerShell directories
-        $documentsPath = [Environment]::GetFolderPath("MyDocuments")
-        $additionalDirs = @(
-            "$documentsPath\PowerShell",
-            "$documentsPath\WindowsPowerShell"
-        )
-        
-        foreach ($dir in $additionalDirs) {
-            if ($dir -ne $profileDir -and (Test-Path $dir)) {
-                $allProfileDirs += $dir
-            }
-        }
-        
-        foreach ($dir in $allProfileDirs) {
-            $themeDst = "$dir\$themeFile"
-            if (-not (Test-Path $themeDst) -or ($dir -eq $profileDir)) {
-                try {
-                    Copy-Item $themeSrc $themeDst -Force -ErrorAction Stop
-                    Log "Oh My Posh theme copied to: $dir" "OK"
-                } catch {
-                    Log "Warning: Could not copy theme to $dir - $($_.Exception.Message)" "WARN"
-                }
-            }
-        }
-    }
-    
-    # Copy modules
-    Log "Installing bundled modules..." "STEP"
-    $srcMod = "$PSScriptRoot\Modules"
-    if (Test-Path $srcMod) {
-        $dstMod = "$profileDir\Modules"
-        Log "Copying modules from $srcMod to $dstMod" "INFO"
-        
-        # If user has existing modules, be more careful
-        if ($hasExistingConfig -and (Test-Path $dstMod)) {
-            Log "Existing modules directory found - merging instead of replacing..." "INFO"
-            
-            # Copy each module individually to avoid overwriting user modules
-            $srcModules = Get-ChildItem $srcMod -Directory
-            foreach ($module in $srcModules) {
-                $dstModulePath = "$dstMod\$($module.Name)"
-                if (Test-Path $dstModulePath) {
-                    Log "Module $($module.Name) already exists - updating with compatibility fixes..." "INFO"
-                    # For Terminal-Icons, make sure we have the format file
-                    if ($module.Name -eq "Terminal-Icons") {
-                        $formatFile = "$($module.FullName)\0.11.0\Terminal-Icons.format.ps1xml"
-                        $dstFormatFile = "$dstModulePath\0.11.0\Terminal-Icons.format.ps1xml"
-                        if ((Test-Path $formatFile) -and (-not (Test-Path $dstFormatFile))) {
-                            try {
-                                Copy-Item $formatFile $dstFormatFile -Force -ErrorAction Stop
-                                Log "Terminal-Icons format file added for compatibility" "OK"
-                            } catch {
-                                Log "Warning: Could not copy Terminal-Icons format file" "WARN"
-                            }
-                        }
-                        # Also update the manifest if needed
-                        $manifestFile = "$($module.FullName)\0.11.0\Terminal-Icons.psd1"
-                        $dstManifestFile = "$dstModulePath\0.11.0\Terminal-Icons.psd1"
-                        if (Test-Path $manifestFile) {
-                            try {
-                                Copy-Item $manifestFile $dstManifestFile -Force -ErrorAction Stop
-                                Log "Terminal-Icons manifest updated" "OK"
-                            } catch {
-                                Log "Warning: Could not update Terminal-Icons manifest" "WARN"
-                            }
-                        }
-                    }
-                } else {
-                    try {
-                        Copy-Item $module.FullName $dstModulePath -Recurse -Force -ErrorAction Stop
-                        Log "Module $($module.Name) copied successfully" "OK"
-                    } catch {
-                        Log "Failed to copy module $($module.Name) - $($_.Exception.Message)" "ERROR"
-                    }
-                }
-            }
-        } else {
-            # Standard behavior for new installations
-            if (Test-Path $dstMod) { 
-                Log "Removing existing modules directory..." "INFO"
-                Remove-Item $dstMod -Recurse -Force -ErrorAction SilentlyContinue 
-            }
-            
-            try {
-                Copy-Item $srcMod $dstMod -Recurse -Force -ErrorAction Stop
-                Log "Modules copied successfully" "OK"
-            } catch {
-                Log "Failed to copy modules - $($_.Exception.Message)" "ERROR"
-            }
-        }
-    } else {
-        Log "No bundled modules found to install" "INFO"
-    }
-
-    Log "Profile installation completed successfully!" "OK"
-    
-    # Cross-compatibility: Ensure profile is available in both PowerShell versions
-    Log "Ensuring cross-compatibility between PowerShell versions..." "STEP"
-    try {
-        # Define both profile directories
-        $documentsPath = [Environment]::GetFolderPath("MyDocuments")
-        $coreProfileDir = "$documentsPath\PowerShell"
-        $winPSProfileDir = "$documentsPath\WindowsPowerShell"
-        
-        # Always install to both versions if they exist or can be created
-        $targetDirs = @()
-        
-        # Check for PowerShell Core (7+)
-        if ((Get-Command pwsh -ErrorAction SilentlyContinue) -or (Test-Path "$env:ProgramFiles\PowerShell\*\pwsh.exe")) {
-            $targetDirs += @{Path = $coreProfileDir; Name = "PowerShell Core"}
-        }
-        
-        # Check for Windows PowerShell (5.1)
-        if ((Get-Command powershell -ErrorAction SilentlyContinue) -or (Test-Path "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe")) {
-            $targetDirs += @{Path = $winPSProfileDir; Name = "Windows PowerShell"}
-        }
-        
-        foreach ($target in $targetDirs) {
-            $targetPath = $target.Path
-            $targetName = $target.Name
-            
-            # Skip if this is the directory we already installed to
-            if ($targetPath -eq $profileDir) {
-                Log "$targetName profile already installed (primary installation)" "OK"
+                Log "Failed to copy profile to $targetName - $($_.Exception.Message)" "ERROR"
                 continue
             }
-            
-            Log "Installing profile for $targetName..." "INFO"
-            
-            # Create target directory if it doesn't exist
-            if (-not (Test-Path $targetPath)) {
-                New-Item -ItemType Directory -Path $targetPath -Force | Out-Null
-                Log "Created $targetName profile directory" "OK"
-            }
-            
-            # Copy profile
-            $targetProfile = "$targetPath\Microsoft.PowerShell_profile.ps1"
+        } else {
+            Log "Source profile not found: $profileSrc" "ERROR"
+            continue
+        }
+        
+        # Copy theme file
+        $themeSrc = "$PSScriptRoot\oh-my-posh-default.json"
+        $themeDst = "$targetPath\oh-my-posh-default.json"
+        if (Test-Path $themeSrc) {
             try {
-                # Backup existing profile if it exists
-                if (Test-Path $targetProfile) {
-                    Copy-Item $targetProfile "$targetProfile.bak" -Force -ErrorAction SilentlyContinue
-                    Log "Backed up existing $targetName profile" "OK"
+                Copy-Item $themeSrc $themeDst -Force -ErrorAction Stop
+                Log "Oh My Posh theme copied to $targetName" "OK"
+            } catch {
+                Log "Failed to copy theme to $targetName - $($_.Exception.Message)" "ERROR"
+            }
+        }
+        
+        # Copy verification script
+        $verifySrc = "$PSScriptRoot\verify-theme.ps1"
+        $verifyDst = "$targetPath\verify-theme.ps1"
+        if (Test-Path $verifySrc) {
+            try {
+                Copy-Item $verifySrc $verifyDst -Force -ErrorAction Stop
+                Log "Verification script copied to $targetName" "OK"
+            } catch {
+                Log "Failed to copy verification script to $targetName - $($_.Exception.Message)" "ERROR"
+            }
+        }
+        
+        # Copy modules
+        $srcMod = "$PSScriptRoot\Modules"
+        if (Test-Path $srcMod) {
+            $dstMod = "$targetPath\Modules"
+            Log "Installing bundled modules for $targetName..." "INFO"
+            
+            try {
+                # Remove existing modules directory to ensure clean install
+                if (Test-Path $dstMod) { 
+                    Remove-Item $dstMod -Recurse -Force -ErrorAction SilentlyContinue 
                 }
                 
-                # Copy the profile with UTF8 encoding
-                $content = Get-Content $PROFILE -Raw -Encoding UTF8
-                [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
-                Log "$targetName profile copied successfully" "OK"
+                Copy-Item $srcMod $dstMod -Recurse -Force -ErrorAction Stop
+                Log "Modules copied to $targetName successfully" "OK"
             } catch {
-                Log "Warning: Could not copy profile to $targetName - $($_.Exception.Message)" "WARN"
-                continue
-            }
-            
-            # Copy theme files
-            try {
-                $themeFiles = Get-ChildItem "$profileDir\*.json" -ErrorAction SilentlyContinue
-                foreach ($theme in $themeFiles) {
-                    Copy-Item $theme.FullName "$targetPath\$($theme.Name)" -Force -ErrorAction SilentlyContinue
-                }
-                if ($themeFiles.Count -gt 0) {
-                    Log "$targetName theme files copied ($($themeFiles.Count) files)" "OK"
-                }
-            } catch {
-                Log "Warning: Could not copy theme files to $targetName" "WARN"
-            }
-            
-            # Copy modules
-            try {
-                if (Test-Path "$profileDir\Modules") {
-                    $targetModules = "$targetPath\Modules"
-                    if (Test-Path $targetModules) {
-                        # Merge modules instead of replacing
-                        $srcModules = Get-ChildItem "$profileDir\Modules" -Directory
-                        foreach ($module in $srcModules) {
-                            $dstModulePath = "$targetModules\$($module.Name)"
-                            if (-not (Test-Path $dstModulePath)) {
-                                Copy-Item $module.FullName $dstModulePath -Recurse -Force -ErrorAction SilentlyContinue
-                            }
-                        }
-                        Log "$targetName modules merged successfully" "OK"
-                    } else {
-                        Copy-Item "$profileDir\Modules" $targetModules -Recurse -Force -ErrorAction SilentlyContinue
-                        Log "$targetName modules copied successfully" "OK"
-                    }
-                }
-            } catch {
-                Log "Warning: Could not copy modules to $targetName" "WARN"
+                Log "Failed to copy modules to $targetName - $($_.Exception.Message)" "ERROR"
             }
         }
         
-        if ($targetDirs.Count -gt 1) {
-            Log "Profile installed for both PowerShell versions for maximum compatibility" "OK"
-        } elseif ($targetDirs.Count -eq 1) {
-            Log "Profile installed for available PowerShell version" "OK"
+        Log "$targetName installation completed" "OK"
+    }
+    
+    Log "Profile installation completed successfully!" "OK"
+    
+    # Final verification
+    Log "Verifying installation..." "STEP"
+    $successCount = 0
+    $totalDirs = $allProfileDirs.Count
+    
+    foreach ($profileDir in $allProfileDirs) {
+        if (Test-Path $profileDir.ProfileFile) {
+            Log "$($profileDir.Name): Profile installed ✓" "OK"
+            $successCount++
         } else {
-            Log "Warning: No PowerShell installations detected for cross-compatibility" "WARN"
+            Log "$($profileDir.Name): Profile missing ✗" "ERROR"
         }
-        
-    } catch {
-        Log "Warning: Could not ensure cross-compatibility - $($_.Exception.Message)" "WARN"
     }
     
     if (-not $Silent) { 
         Write-Host ""
-        Write-Host "Installation Summary:" -ForegroundColor Cyan
-        Write-Host "✓ PowerShell profile configured" -ForegroundColor Green
+        Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+        Write-Host "                 INSTALLATION SUMMARY" -ForegroundColor Cyan
+        Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+        Write-Host "✓ PowerShell profiles installed: $successCount/$totalDirs" -ForegroundColor Green
         Write-Host "✓ Essential modules installed" -ForegroundColor Green  
-        Write-Host "✓ Configuration files copied" -ForegroundColor Green
+        Write-Host "✓ Oh My Posh theme configured" -ForegroundColor Green
+        Write-Host "✓ Git integration enabled" -ForegroundColor Green
+        Write-Host "✓ Terminal icons configured" -ForegroundColor Green
         
-        if ($hasExistingConfig) {
-            Write-Host ""
-            Write-Host "Existing Configuration Preserved:" -ForegroundColor Yellow
-            if ($existingThemes.Count -gt 0) {
-                Write-Host "✓ Oh-My-Posh themes: $($existingThemes -join ', ')" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Installed for:" -ForegroundColor Yellow
+        foreach ($profileDir in $allProfileDirs) {
+            if (Test-Path $profileDir.ProfileFile) {
+                Write-Host "  ✓ $($profileDir.Name)" -ForegroundColor Green
+            } else {
+                Write-Host "  ✗ $($profileDir.Name)" -ForegroundColor Red
             }
-            if ($existingScripts.Count -gt 0) {
-                Write-Host "✓ Custom scripts: $($existingScripts -join ', ')" -ForegroundColor Green
-            }
-            Write-Host "✓ Full backup created in: backup-$(Get-Date -Format 'yyyy-MM-dd-HHmm')" -ForegroundColor Green
         }
         
         Write-Host ""
-        Write-Host "Next: Restart PowerShell and try: neofetch, ll, health" -ForegroundColor Yellow
+        Write-Host "Next Steps:" -ForegroundColor Cyan
+        Write-Host "1. Close this PowerShell window" -ForegroundColor White
+        Write-Host "2. Open a new PowerShell (or PowerShell Core) window" -ForegroundColor White
+        Write-Host "3. Try these commands:" -ForegroundColor White
+        Write-Host "   • neofetch    - System information" -ForegroundColor Gray
+        Write-Host "   • ll          - Enhanced directory listing" -ForegroundColor Gray
+        Write-Host "   • health      - System health check" -ForegroundColor Gray
+        Write-Host "   • help-profile - Show all available commands" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
     }
     
     # Cleanup temporary files and folders
@@ -457,7 +348,10 @@ try {
             "$env:TEMP\*posh-git*", 
             "$env:TEMP\*terminal-icons*",
             "$env:TEMP\NuGet",
-            "$env:LOCALAPPDATA\Temp\*powershell*"
+            "$env:LOCALAPPDATA\Temp\*powershell*",
+            "$env:TEMP\powershell-profile-install",
+            "$env:TEMP\PSRepository*",
+            "$env:TEMP\ModuleAnalysisCache"
         )
         
         foreach ($tempPath in $tempPaths) {
@@ -470,26 +364,17 @@ try {
             }
         }
         
-        # Clean up any installation-specific temp directories
-        $installTempDirs = @(
-            "$env:TEMP\powershell-profile-install",
-            "$env:TEMP\PSRepository*",
-            "$env:TEMP\ModuleAnalysisCache"
-        )
-        
-        foreach ($dir in $installTempDirs) {
-            if (Test-Path $dir) {
-                try {
-                    Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
-                } catch {
-                    # Silently continue if cleanup fails
-                }
-            }
-        }
-        
         Log "Temporary files cleanup completed" "OK"
     } catch {
         Log "Warning: Some temporary files could not be cleaned up" "WARN"
+    }
+    
+    # Return success code based on results
+    if ($successCount -eq $totalDirs) {
+        exit 0
+    } else {
+        Log "Warning: Not all PowerShell versions were configured successfully" "WARN"
+        exit 1
     }
     
 } catch {
@@ -520,8 +405,18 @@ try {
     
     if (-not $Silent) {
         Write-Host ""
-        Write-Host "Installation failed with error:" -ForegroundColor Red
-        Write-Host $_.Exception.Message -ForegroundColor Red
+        Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Red
+        Write-Host "                 INSTALLATION FAILED" -ForegroundColor Red
+        Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Troubleshooting:" -ForegroundColor Yellow
+        Write-Host "1. Run as Administrator" -ForegroundColor White
+        Write-Host "2. Check internet connection" -ForegroundColor White
+        Write-Host "3. Verify PowerShell execution policy" -ForegroundColor White
+        Write-Host "4. Try manual installation from GitHub" -ForegroundColor White
+        Write-Host "5. Check Windows version compatibility" -ForegroundColor White
+        Write-Host ""
     }
     exit 1
 }

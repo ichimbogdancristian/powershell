@@ -1,27 +1,75 @@
 # PowerShell Enhanced Profile
 
-A streamlined PowerShell profile with Linux-like aliases, system monitoring, and enhanced prompt.
+A streamlined PowerShell profile with Linux-like aliases, system monitoring, and enhanced prompt that works seamlessly across both PowerShell 5.1 and PowerShell Core 7+.
 
 ## Quick Start
 
-**Ultra-fast installation (downloads from GitHub):**
+**🚀 Ultra-fast installation (downloads from GitHub):**
 ```batch
 quick-setup.bat
 ```
 
-**Standard installation (if you have the repository):**
+**📦 Local installation (if you have the repository):**
 ```powershell
+# Fresh installation (recommended)
+.\quick-install.ps1 -CleanInstall
+
+# Preserve existing configurations
 .\quick-install.ps1
 ```
 
-## Features
+## ✨ Key Features
 
-- **Linux-like aliases**: `ll`, `la`, `grep`, `find`, etc.
-- **System monitoring**: `neofetch`, `health` commands
-- **Git integration**: Enhanced git status and branch info
-- **Oh My Posh themes**: Beautiful, customizable prompts with custom default theme
-- **Enhanced file operations**: Smart ls, file type icons
-- **Cross-platform**: Works on both Windows PowerShell 5.1 and PowerShell 7+
+- **🐧 Linux-like aliases**: `ll`, `la`, `grep`, `find`, `top`, `df`, `free`, etc.
+- **📊 System monitoring**: `neofetch`, `health` commands with real-time stats
+- **🔧 Git integration**: Enhanced git status and branch info
+- **🎨 Oh My Posh themes**: Beautiful, customizable prompts with custom default theme
+- **📁 Enhanced file operations**: Smart ls with colors, file type icons, and detailed views
+- **⚡ Cross-platform**: Automatically installs for both PowerShell 5.1 and PowerShell Core 7+
+- **🔄 Smart installation**: Clean install option, automatic backups, and cross-version support
+
+## 🎯 What Makes This Different
+
+- **Dual PowerShell Support**: Automatically detects and installs for both PS5 and PS7
+- **Clean Installation**: `-CleanInstall` option removes old configurations safely
+- **Smart Backups**: Preserves your existing customizations before updating
+- **Enhanced Compatibility**: Works in VS Code, Windows Terminal, and regular PowerShell
+- **Comprehensive**: Includes modules, themes, and tools in one package
+
+## 📋 Installation Options
+
+### Option 1: GitHub Download (Recommended)
+Downloads the latest version and installs automatically:
+```batch
+quick-setup.bat
+```
+
+### Option 2: Local Installation
+If you've cloned the repository:
+```powershell
+# Clean installation (removes old profiles, creates backups)
+.\quick-install.ps1 -CleanInstall
+
+# Regular installation (preserves existing)
+.\quick-install.ps1
+
+# Verbose output for troubleshooting
+.\quick-install.ps1 -CleanInstall -Verbose
+```
+
+## 🔍 Installation Details
+
+The installer will:
+1. **Detect** both PowerShell 5.1 and PowerShell Core 7+ installations
+2. **Clean** old profile installations (if `-CleanInstall` used)
+3. **Install** essential modules: PSReadLine, posh-git, Terminal-Icons
+4. **Install** tools via winget: oh-my-posh, git, zoxide
+5. **Copy** profiles to both PowerShell versions
+6. **Verify** installation success
+
+**Installation Locations:**
+- PowerShell Core: `Documents\PowerShell\`
+- Windows PowerShell: `Documents\WindowsPowerShell\`
 
 ## Included Oh My Posh Theme
 

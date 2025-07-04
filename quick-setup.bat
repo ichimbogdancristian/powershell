@@ -122,7 +122,8 @@ echo ═════════════════════════
 
 REM Run installation script with visible output
 cd /d "%EXTRACT_DIR%"
-powershell -ExecutionPolicy Bypass -Command "& '.\quick-install.ps1'; if ($LASTEXITCODE -ne 0) { exit 1 }"
+echo [INFO] Running installation with clean install option...
+powershell -ExecutionPolicy Bypass -Command "& '.\quick-install.ps1' -CleanInstall; if ($LASTEXITCODE -ne 0) { exit 1 }"
 set "INSTALL_RESULT=%errorlevel%"
 
 echo.
