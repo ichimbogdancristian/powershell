@@ -161,9 +161,78 @@ try {
         Write-Host "Next: Restart PowerShell and try: neofetch, ll, health" -ForegroundColor Yellow
     }
     
+    # Cleanup temporary files and folders
+    Log "Cleaning up temporary files..." "STEP"
+    try {
+        # Clean up any PowerShell module installation temp files
+        $tempPaths = @(
+            "$env:TEMP\*powershell*",
+            "$env:TEMP\*posh-git*", 
+            "$env:TEMP\*terminal-icons*",
+            "$env:TEMP\NuGet",
+            "$env:LOCALAPPDATA\Temp\*powershell*"
+        )
+        
+        foreach ($tempPath in $tempPaths) {
+            if (Test-Path $tempPath) {
+                try {
+                    Remove-Item $tempPath -Recurse -Force -ErrorAction SilentlyContinue
+                    Log "Cleaned: $tempPath" "INFO"
+                } catch {
+                    # Silently continue if cleanup fails
+                }
+            }
+        }
+        
+        # Clean up any installation-specific temp directories
+        $installTempDirs = @(
+            "$env:TEMP\powershell-profile-install",
+            "$env:TEMP\PSRepository*",
+            "$env:TEMP\ModuleAnalysisCache"
+        )
+        
+        foreach ($dir in $installTempDirs) {
+            if (Test-Path $dir) {
+                try {
+                    Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+                    Log "Removed temp directory: $dir" "INFO"
+                } catch {
+                    # Silently continue if cleanup fails
+                }
+            }
+        }
+        
+        Log "Temporary files cleanup completed" "OK"
+    } catch {
+        Log "Warning: Some temporary files could not be cleaned up" "WARN"
+    }
+    
 } catch {
     Log "Installation failed: $($_.Exception.Message)" "ERROR"
     Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"
+    
+    # Cleanup even on failure
+    Log "Performing cleanup after failed installation..." "INFO"
+    try {
+        $tempPaths = @(
+            "$env:TEMP\*powershell*",
+            "$env:TEMP\*posh-git*", 
+            "$env:TEMP\*terminal-icons*",
+            "$env:TEMP\NuGet",
+            "$env:TEMP\powershell-profile-install",
+            "$env:TEMP\PSRepository*"
+        )
+        
+        foreach ($tempPath in $tempPaths) {
+            if (Test-Path $tempPath) {
+                Remove-Item $tempPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+        Log "Cleanup completed" "OK"
+    } catch {
+        # Silently fail cleanup
+    }
+    
     if (-not $Silent) {
         Write-Host ""
         Write-Host "Installation failed with error:" -ForegroundColor Red
