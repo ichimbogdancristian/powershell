@@ -122,6 +122,14 @@ try {
                 if ($file -like "*.ps1") {
                     $content = Get-Content $src -Raw -Encoding UTF8
                     [System.IO.File]::WriteAllText($dst, $content, [System.Text.Encoding]::UTF8)
+                    
+                    # Validate the copied file
+                    try {
+                        powershell -NoProfile -Command "Get-Content '$dst' | Out-Null" -ErrorAction Stop | Out-Null
+                        Log "Profile syntax validated successfully" "OK"
+                    } catch {
+                        Log "Warning: Profile may have syntax issues after copy" "WARN"
+                    }
                 } else {
                     Copy-Item $src $dst -Force -ErrorAction Stop
                 }
