@@ -118,7 +118,13 @@ try {
         Log "Copying $file..." "INFO"
         if (Test-Path $src) { 
             try {
-                Copy-Item $src $dst -Force -ErrorAction Stop
+                # Use UTF8 encoding for PowerShell files to preserve emojis
+                if ($file -like "*.ps1") {
+                    $content = Get-Content $src -Raw -Encoding UTF8
+                    [System.IO.File]::WriteAllText($dst, $content, [System.Text.Encoding]::UTF8)
+                } else {
+                    Copy-Item $src $dst -Force -ErrorAction Stop
+                }
                 Log "$file copied successfully" "OK"
             } catch {
                 Log "Failed to copy $file - $($_.Exception.Message)" "ERROR"
