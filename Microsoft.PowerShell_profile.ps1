@@ -119,12 +119,41 @@ if ($env:TERM_PROGRAM -eq "vscode") {
 }
 
 # Initialize Oh My Posh with default theme
-$ohMyPoshTheme = Join-Path $PSScriptRoot "oh-my-posh-default.json"
-if (Test-Path $ohMyPoshTheme) {
-    oh-my-posh init pwsh --config $ohMyPoshTheme | Invoke-Expression
+# Try multiple locations for the theme file
+$themeLocations = @(
+    (Join-Path $PSScriptRoot "oh-my-posh-default.json"),
+    (Join-Path (Split-Path $PROFILE -Parent) "oh-my-posh-default.json"),
+    (Join-Path $env:USERPROFILE "Documents\PowerShell\oh-my-posh-default.json"),
+    (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\oh-my-posh-default.json")
+)
+
+$ohMyPoshTheme = $null
+foreach ($location in $themeLocations) {
+    if (Test-Path $location) {
+        $ohMyPoshTheme = $location
+        break
+    }
+}
+
+if ($ohMyPoshTheme) {
+    try {
+        oh-my-posh init pwsh --config $ohMyPoshTheme | Invoke-Expression
+        Write-Verbose "Oh My Posh initialized with custom theme: $ohMyPoshTheme"
+    } catch {
+        Write-Warning "Failed to load custom Oh My Posh theme: $($_.Exception.Message)"
+        # Fallback to built-in theme
+        if ($env:POSH_THEMES_PATH -and (Test-Path "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json")) {
+            oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
+        }
+    }
 } else {
-    # Fallback to a built-in theme
-    oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
+    # Fallback to a built-in theme if available
+    if ($env:POSH_THEMES_PATH -and (Test-Path "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json")) {
+        oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
+        Write-Verbose "Oh My Posh initialized with fallback theme"
+    } else {
+        Write-Warning "Oh My Posh theme not found. Please install Oh My Posh or check theme file location."
+    }
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════

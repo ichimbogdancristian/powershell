@@ -173,7 +173,7 @@ try {
     
     # Copy files
     Log "Copying profile files..." "STEP"
-    $filesToCopy = @("Microsoft.PowerShell_profile.ps1","oh-my-posh-default.json")
+    $filesToCopy = @("Microsoft.PowerShell_profile.ps1","oh-my-posh-default.json","verify-theme.ps1")
     foreach ($file in $filesToCopy) {
         $src = "$PSScriptRoot\$file"
         $dst = if($file -like "*.ps1"){$PROFILE}else{"$profileDir\$file"}
@@ -201,23 +201,51 @@ try {
                 if ($file -like "*.ps1") {
                     $content = Get-Content $src -Raw -Encoding UTF8
                     [System.IO.File]::WriteAllText($dst, $content, [System.Text.Encoding]::UTF8)
-                    
-                    # Validate the copied file
-                    try {
-                        powershell -NoProfile -Command "Get-Content '$dst' | Out-Null" -ErrorAction Stop | Out-Null
-                        Log "Profile syntax validated successfully" "OK"
-                    } catch {
-                        Log "Warning: Profile may have syntax issues after copy" "WARN"
-                    }
                 } else {
+                    # For JSON and other files, preserve exact content
                     Copy-Item $src $dst -Force -ErrorAction Stop
                 }
-                Log "$file copied successfully" "OK"
+                Log "Copied $file successfully" "OK"
             } catch {
                 Log "Failed to copy $file - $($_.Exception.Message)" "ERROR"
             }
-        } else {
-            Log "$file not found in source directory" "WARN"
+        } else { 
+            Log "Source file not found: $src" "WARN" 
+        }
+    }
+    
+    # Ensure Oh My Posh theme is available for cross-platform installations
+    Log "Ensuring Oh My Posh theme availability across PowerShell versions..." "STEP"
+    $themeFile = "oh-my-posh-default.json"
+    $themeSrc = "$PSScriptRoot\$themeFile"
+    
+    if (Test-Path $themeSrc) {
+        # Copy theme to both PowerShell directories if they exist
+        $allProfileDirs = @($profileDir)
+        
+        # Add other PowerShell directories
+        $documentsPath = [Environment]::GetFolderPath("MyDocuments")
+        $additionalDirs = @(
+            "$documentsPath\PowerShell",
+            "$documentsPath\WindowsPowerShell"
+        )
+        
+        foreach ($dir in $additionalDirs) {
+            if ($dir -ne $profileDir -and (Test-Path $dir)) {
+                $allProfileDirs += $dir
+            }
+        }
+        
+        foreach ($dir in $allProfileDirs) {
+            $themeDst = "$dir\$themeFile"
+            if (-not (Test-Path $themeDst) -or ($dir -eq $profileDir)) {
+                try {
+                    Copy-Item $themeSrc $themeDst -Force -ErrorAction Stop
+                    Log "Oh My Posh theme copied to: $dir" "OK"
+                } catch {
+                    Log "Warning: Could not copy theme to $dir - $($_.Exception.Message)" "WARN"
+                }
+            }
         }
     }
     
