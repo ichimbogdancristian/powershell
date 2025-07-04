@@ -75,7 +75,7 @@ try {
             if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
                 Log "Installing $($tool.name)..." "INFO"
                 try {
-                    $result = winget install $tool.id --silent --accept-source-agreements --accept-package-agreements 2>&1
+                    $null = winget install $tool.id --silent --accept-source-agreements --accept-package-agreements 2>&1
                     if ($LASTEXITCODE -eq 0) {
                         Log "$($tool.name) installed successfully" "OK"
                     } else {
