@@ -479,9 +479,9 @@ function Show-WelcomeMessage {
         Write-Host "╰─────────────────────────────────────────────────────────╯" -ForegroundColor Magenta
         Write-Host ""
         Write-Host "Available commands: ll, la, neofetch, df, free, uptime, health, reload-profile" -ForegroundColor DarkGray
-        Write-Host "Use 'z <directory>' for smart navigation | Git shortcuts: g, gs, ga, gc, gp, gst" -ForegroundColor DarkGray
+        Write-Host "Use 'z `<directory`>' for smart navigation | Git shortcuts: g, gs, ga, gc, gp, gst" -ForegroundColor DarkGray
         Write-Host "Enhanced: copyf, cdd, size, extract, serve, weather, ff, search, bookmarks" -ForegroundColor DarkGray
-        Write-Host "Bookmarks: bookmark <name>, go <name>, bookmarks, unbookmark <name>" -ForegroundColor DarkGray
+        Write-Host 'Bookmarks: bookmark <name>, go <name>, bookmarks, unbookmark <name>' -ForegroundColor DarkGray
         Write-Host ""
     }
 }
