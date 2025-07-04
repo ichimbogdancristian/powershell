@@ -94,9 +94,24 @@ try {
     # Setup profile
     Log "Setting up PowerShell profile..." "STEP"
     
-    # Detect correct PowerShell profile directory
+    # Detect correct PowerShell profile directory for both PowerShell versions
     $profileDir = Split-Path $PROFILE -Parent
+    $psVersion = $PSVersionTable.PSVersion.Major
+    
+    # For PowerShell Core (7+), ensure we use the correct directory
+    if ($psVersion -ge 7) {
+        $coreProfileDir = Split-Path $PROFILE -Parent
+        $winPSProfileDir = $coreProfileDir -replace 'PowerShell$', 'WindowsPowerShell'
+        
+        # If this script is being run from Windows PowerShell but we want PowerShell Core compatibility
+        if ($profileDir -like "*WindowsPowerShell*") {
+            $profileDir = $coreProfileDir
+            Log "Detected PowerShell Core environment - using PowerShell directory" "INFO"
+        }
+    }
+    
     Log "Profile directory: $profileDir" "INFO"
+    Log "PowerShell version: $($PSVersionTable.PSVersion)" "INFO"
     
     # Check if user has existing PowerShell configurations
     $hasExistingConfig = $false
@@ -275,6 +290,48 @@ try {
     }
 
     Log "Profile installation completed successfully!" "OK"
+    
+    # Cross-compatibility: Ensure profile is available in both PowerShell versions
+    Log "Ensuring cross-compatibility between PowerShell versions..." "STEP"
+    try {
+        $coreProfileDir = Split-Path $PROFILE -Parent
+        $winPSProfileDir = $coreProfileDir -replace 'PowerShell$', 'WindowsPowerShell'
+        
+        # If we installed to Windows PowerShell but PowerShell Core exists
+        if ($profileDir -like "*WindowsPowerShell*" -and (Test-Path (Split-Path $coreProfileDir))) {
+            if (-not (Test-Path $coreProfileDir)) {
+                New-Item -ItemType Directory -Path $coreProfileDir -Force | Out-Null
+            }
+            $coreProfile = "$coreProfileDir\Microsoft.PowerShell_profile.ps1"
+            if (-not (Test-Path $coreProfile)) {
+                Copy-Item $PROFILE $coreProfile -Force -ErrorAction SilentlyContinue
+                Copy-Item "$profileDir\*.json" $coreProfileDir -Force -ErrorAction SilentlyContinue
+                if (Test-Path "$profileDir\Modules") {
+                    Copy-Item "$profileDir\Modules" $coreProfileDir -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                Log "Profile also copied to PowerShell Core directory for compatibility" "OK"
+            }
+        }
+        
+        # If we installed to PowerShell Core but Windows PowerShell exists
+        if ($profileDir -like "*PowerShell$" -and (Test-Path (Split-Path $winPSProfileDir))) {
+            if (-not (Test-Path $winPSProfileDir)) {
+                New-Item -ItemType Directory -Path $winPSProfileDir -Force | Out-Null
+            }
+            $winPSProfile = "$winPSProfileDir\Microsoft.PowerShell_profile.ps1"
+            if (-not (Test-Path $winPSProfile)) {
+                Copy-Item $PROFILE $winPSProfile -Force -ErrorAction SilentlyContinue
+                Copy-Item "$profileDir\*.json" $winPSProfileDir -Force -ErrorAction SilentlyContinue
+                if (Test-Path "$profileDir\Modules") {
+                    Copy-Item "$profileDir\Modules" $winPSProfileDir -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                Log "Profile also copied to Windows PowerShell directory for compatibility" "OK"
+            }
+        }
+    } catch {
+        Log "Warning: Could not ensure cross-compatibility - $($_.Exception.Message)" "WARN"
+    }
+    
     if (-not $Silent) { 
         Write-Host ""
         Write-Host "Installation Summary:" -ForegroundColor Cyan
