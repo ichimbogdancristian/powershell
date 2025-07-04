@@ -9,9 +9,19 @@ A streamlined PowerShell profile with Linux-like aliases, system monitoring, and
 quick-setup.bat
 ```
 
-**Or if you already have the repository:**
+**Standard installation (if you have the repository):**
 ```powershell
 .\quick-install.ps1
+```
+
+**Simple installation (minimal, for troubleshooting):**
+```powershell
+.\simple-install.ps1
+```
+
+**Test installation (with fresh profile):**
+```powershell
+.\test-install.ps1 -Clean
 ```
 
 ## Features
@@ -72,6 +82,11 @@ oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\[theme-name].omp.json" | In
 2. Check if theme file exists in your PowerShell directory
 3. Restart PowerShell after installation
 
+**No existing profile (fresh installation):**
+1. Use the simple installer: `.\simple-install.ps1`
+2. Or test with clean installation: `.\test-install.ps1 -Clean`
+3. Ensure PowerShell execution policy allows scripts: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
+
 **Icons not displaying:**
 1. Install a Nerd Font (recommended: FiraCode Nerd Font)
 2. Set your terminal font to the installed Nerd Font
@@ -80,6 +95,11 @@ oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\[theme-name].omp.json" | In
 **Performance issues:**
 - The theme automatically optimizes for VS Code
 - Disable animations if needed: `$env:POSH_DISABLE_ANIMATIONS = $true`
+
+**Cross-platform issues:**
+- The installer automatically sets up both PowerShell 5.1 and 7+ if present
+- Use `$PROFILE` to check your profile location
+- Manual installation: copy files to `Documents\PowerShell\` or `Documents\WindowsPowerShell\`
 
 ---
 
