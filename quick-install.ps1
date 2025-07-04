@@ -152,18 +152,21 @@ try {
 
     Log "Profile installation completed successfully!" "OK"
     if (-not $Silent) { 
-        Write-Host "`nInstallation Summary:" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Installation Summary:" -ForegroundColor Cyan
         Write-Host "✓ PowerShell profile configured" -ForegroundColor Green
         Write-Host "✓ Essential modules installed" -ForegroundColor Green  
         Write-Host "✓ Configuration files copied" -ForegroundColor Green
-        Write-Host "`nNext: Restart PowerShell and try: neofetch, ll, health" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Next: Restart PowerShell and try: neofetch, ll, health" -ForegroundColor Yellow
     }
     
 } catch {
     Log "Installation failed: $($_.Exception.Message)" "ERROR"
     Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"
     if (-not $Silent) {
-        Write-Host "`nInstallation failed with error:" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Installation failed with error:" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
     }
     exit 1
