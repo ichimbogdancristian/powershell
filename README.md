@@ -39,18 +39,19 @@ quick-setup.bat
 ## 📋 Installation Options
 
 ### Option 1: GitHub Download (Recommended)
-Downloads the latest version and installs automatically:
+Downloads the latest version and completely clears profile directories for fresh installation:
 ```batch
 quick-setup.bat
 ```
+**⚠️ Note: This will completely remove ALL contents from your PowerShell profile directories without backups!**
 
 ### Option 2: Local Installation
 If you've cloned the repository:
 ```powershell
-# Clean installation (removes old profiles, creates backups)
+# Complete clean installation (removes all profile contents, no backups)
 .\quick-install.ps1 -CleanInstall
 
-# Regular installation (preserves existing)
+# Regular installation (preserves existing files)
 .\quick-install.ps1
 
 # Verbose output for troubleshooting
@@ -61,15 +62,15 @@ If you've cloned the repository:
 
 The installer will:
 1. **Detect** both PowerShell 5.1 and PowerShell Core 7+ installations
-2. **Clean** old profile installations (if `-CleanInstall` used)
+2. **Completely clear** profile directories (if `-CleanInstall` used) - **NO BACKUPS**
 3. **Install** essential modules: PSReadLine, posh-git, Terminal-Icons
 4. **Install** tools via winget: oh-my-posh, git, zoxide
-5. **Copy** profiles to both PowerShell versions
+5. **Copy** fresh profiles to both PowerShell versions
 6. **Verify** installation success
 
 **Installation Locations:**
-- PowerShell Core: `Documents\PowerShell\`
-- Windows PowerShell: `Documents\WindowsPowerShell\`
+- PowerShell Core: `Documents\PowerShell\` (completely cleared and repopulated)
+- Windows PowerShell: `Documents\WindowsPowerShell\` (completely cleared and repopulated)
 
 ## Included Oh My Posh Theme
 

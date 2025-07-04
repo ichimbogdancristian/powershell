@@ -63,65 +63,55 @@ function Get-PowerShellProfileDirs {
     return $profileDirs
 }
 
-# Function to clean old profile installations
+# Function to completely clear profile directories (no backups)
 function Clear-OldProfiles {
     param($ProfileDirs)
     
-    Log "Cleaning old profile installations..." "CLEAN"
+    Log "Completely clearing PowerShell profile directories (no backups)..." "CLEAN"
     
     foreach ($profileDir in $ProfileDirs) {
         $path = $profileDir.Path
         $name = $profileDir.Name
         
         if (Test-Path $path) {
-            Log "Cleaning $name directory: $path" "CLEAN"
+            Log "Completely clearing $name directory: $path" "CLEAN"
             
-            # Create backup first
-            $backupPath = "$path\backup-before-clean-$(Get-Date -Format 'yyyy-MM-dd-HHmmss')"
             try {
-                if (Test-Path $profileDir.ProfileFile) {
-                    New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
-                    Copy-Item $profileDir.ProfileFile "$backupPath\Microsoft.PowerShell_profile.ps1.bak" -Force
-                    Log "Backed up existing profile to: $backupPath" "OK"
+                # Remove entire directory contents
+                Get-ChildItem $path -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                Log "All contents removed from $name directory" "OK"
+                
+                # Ensure directory still exists (empty)
+                if (-not (Test-Path $path)) {
+                    New-Item -ItemType Directory -Path $path -Force | Out-Null
+                    Log "Recreated empty $name directory" "OK"
                 }
-            } catch {
-                Log "Warning: Could not backup existing profile" "WARN"
-            }
-            
-            # Remove old files but keep backups
-            try {
-                # Remove profile
-                if (Test-Path $profileDir.ProfileFile) {
-                    Remove-Item $profileDir.ProfileFile -Force
-                    Log "Removed old profile from $name" "OK"
-                }
-                
-                # Remove theme files
-                Get-ChildItem "$path\*.json" -ErrorAction SilentlyContinue | Remove-Item -Force
-                Log "Removed old theme files from $name" "OK"
-                
-                # Remove old modules (but preserve user-installed ones)
-                $modulesPath = "$path\Modules"
-                if (Test-Path $modulesPath) {
-                    $knownModules = @('posh-git', 'Terminal-Icons', 'PSReadLine')
-                    foreach ($module in $knownModules) {
-                        $modulePath = "$modulesPath\$module"
-                        if (Test-Path $modulePath) {
-                            Remove-Item $modulePath -Recurse -Force -ErrorAction SilentlyContinue
-                            Log "Removed old $module module from $name" "OK"
-                        }
-                    }
-                }
-                
-                # Remove any installation temp files
-                Get-ChildItem "$path\temp-*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-                Get-ChildItem "$path\install-*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-                
             } catch {
                 Log "Warning: Some files could not be removed from $name - $($_.Exception.Message)" "WARN"
+                
+                # Force remove specific items if general removal failed
+                try {
+                    # Remove profile files
+                    Get-ChildItem "$path\*.ps1" -Force -ErrorAction SilentlyContinue | Remove-Item -Force
+                    # Remove theme files
+                    Get-ChildItem "$path\*.json" -Force -ErrorAction SilentlyContinue | Remove-Item -Force
+                    # Remove modules directory
+                    if (Test-Path "$path\Modules") {
+                        Remove-Item "$path\Modules" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    # Remove scripts directory
+                    if (Test-Path "$path\Scripts") {
+                        Remove-Item "$path\Scripts" -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                    # Remove any backup directories
+                    Get-ChildItem "$path\backup-*" -Directory -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+                    Log "Force-removed specific items from $name" "OK"
+                } catch {
+                    Log "Warning: Some items still could not be removed from $name" "WARN"
+                }
             }
         } else {
-            Log "$name directory doesn't exist, will be created" "INFO"
+            Log "$name directory doesn't exist, will be created fresh" "INFO"
         }
     }
 }
