@@ -22,10 +22,6 @@ quick-setup.bat
 - **Oh My Posh themes**: Beautiful, customizable prompts
 - **Enhanced file operations**: Smart ls, file type icons
 
-## Documentation
-
-See [INSTALL-GUIDE.md](INSTALL-GUIDE.md) for detailed installation options and troubleshooting.
-
 ## Quick Commands After Install
 
 ```powershell
