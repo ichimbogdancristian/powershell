@@ -73,13 +73,13 @@ if ($env:TERM_PROGRAM -eq "vscode") {
     $env:POSH_DISABLE_ANIMATIONS = $true
 }
 
-# Initialize Oh My Posh with thecyberden theme
-$ohMyPoshTheme = Join-Path $PSScriptRoot "thecyberden.omp.json"
+# Initialize Oh My Posh with default theme
+$ohMyPoshTheme = Join-Path $PSScriptRoot "oh-my-posh-default.json"
 if (Test-Path $ohMyPoshTheme) {
     oh-my-posh init pwsh --config $ohMyPoshTheme | Invoke-Expression
 } else {
     # Fallback to a built-in theme
-    oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\thecyberden.omp.json" | Invoke-Expression
+    oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -101,9 +101,10 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
 # File and Directory Operations
 Set-Alias -Name ll -Value Get-ChildItemColorized
 Set-Alias -Name lld -Value Get-ChildItemDetailed  # Detailed view without colors
-Set-Alias -Name la -Value Get-ChildItemAll
-Set-Alias -Name l -Value Get-ChildItem
-Set-Alias -Name ls -Value Get-ChildItem
+Set-Alias -Name la -Value Get-ChildItemColorizedAll  # Show hidden files with colors
+Set-Alias -Name l -Value Get-ChildItemColorized
+Set-Alias -Name ls -Value Get-ChildItemColorized
+Set-Alias -Name dir -Value Get-ChildItemColorized  # Override default dir with colorized version
 Set-Alias -Name cat -Value Get-Content
 Set-Alias -Name grep -Value Select-String
 Set-Alias -Name find -Value Get-ChildItem
@@ -180,7 +181,15 @@ function Get-ChildItemDetailed {
     }
 }
 
-# Show all files including hidden
+# Show all files including hidden with colors
+function Get-ChildItemColorizedAll {
+    param(
+        [string]$Path = "."
+    )
+    Get-ChildItemColorized -Path $Path -ShowHidden
+}
+
+# Show all files including hidden (simple view)
 function Get-ChildItemAll {
     param(
         [string]$Path = "."
@@ -783,7 +792,9 @@ function Get-ProfileHelp {
     Write-Host "│                  Custom Commands Help                    │" -ForegroundColor Blue
     Write-Host "├─────────────────────────────────────────────────────────┤" -ForegroundColor Blue
     Write-Host "│ File Operations:" -ForegroundColor Yellow
-    Write-Host "│  ll, la, ls      - List files (detailed, all, simple)" -ForegroundColor White
+    Write-Host "│  ll, la, ls, dir - Colorized file listing with table format" -ForegroundColor White
+    Write-Host "│  lld             - Detailed view without colors" -ForegroundColor White
+    Write-Host "│  colors/legend   - Show file type color legend" -ForegroundColor White
     Write-Host "│  copyf           - Enhanced copy with -r for recursive" -ForegroundColor White
     Write-Host "│  cdd             - Enhanced cd with history (cdd -)" -ForegroundColor White
     Write-Host "│  size            - Get file/directory size" -ForegroundColor White
@@ -819,23 +830,194 @@ function Get-ProfileHelp {
 
 Set-Alias -Name help-profile -Value Get-ProfileHelp
 Set-Alias -Name commands -Value Get-ProfileHelp
+Set-Alias -Name colors -Value Show-FileColorLegend
+Set-Alias -Name legend -Value Show-FileColorLegend
 
-# Enhanced ls with colors and details (preserves Terminal-Icons colors)
+# Enhanced ls with colors and structured table format
 function Get-ChildItemColorized {
     param(
-        [string]$Path = "."
+        [string]$Path = ".",
+        [switch]$ShowHidden
     )
     
-    # Just show the colorized view with Terminal-Icons
-    Get-ChildItem -Path $Path -Force
+    # Get items with optional hidden files
+    if ($ShowHidden) {
+        $items = Get-ChildItem -Path $Path -Force
+    } else {
+        $items = Get-ChildItem -Path $Path
+    }
     
-    # Add a summary line
-    $items = Get-ChildItem -Path $Path -Force
-    $dirs = ($items | Where-Object { $_.PSIsContainer }).Count
-    $files = ($items | Where-Object { -not $_.PSIsContainer }).Count
+    if ($items.Count -eq 0) {
+        Write-Host "No items found in directory: $Path" -ForegroundColor Yellow
+        return
+    }
+    
+    # Separate directories and files
+    $directories = $items | Where-Object { $_.PSIsContainer } | Sort-Object Name
+    $files = $items | Where-Object { -not $_.PSIsContainer } | Sort-Object Name
+    
+    # Function to get file color based on extension
+    function Get-FileColor {
+        param([string]$Extension, [bool]$IsDirectory)
+        
+        if ($IsDirectory) {
+            return "Blue"
+        }
+        
+        switch ($Extension.ToLower()) {
+            {$_ -in '.exe', '.msi', '.bat', '.cmd', '.ps1', '.sh'} { return "Green" }
+            {$_ -in '.txt', '.md', '.readme', '.log'} { return "White" }
+            {$_ -in '.json', '.xml', '.yaml', '.yml', '.config'} { return "Yellow" }
+            {$_ -in '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico'} { return "Magenta" }
+            {$_ -in '.mp3', '.wav', '.mp4', '.avi', '.mkv', '.mov'} { return "DarkMagenta" }
+            {$_ -in '.zip', '.rar', '.7z', '.tar', '.gz'} { return "Red" }
+            {$_ -in '.cs', '.js', '.ts', '.py', '.cpp', '.h', '.css', '.html'} { return "Cyan" }
+            {$_ -in '.dll', '.lib', '.so'} { return "DarkRed" }
+            {$_ -in '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'} { return "DarkYellow" }
+            default { return "Gray" }
+        }
+    }
+    
+    # Function to get file type icon/symbol
+    function Get-FileSymbol {
+        param([string]$Extension, [bool]$IsDirectory)
+        
+        if ($IsDirectory) {
+            return "📁"
+        }
+        
+        switch ($Extension.ToLower()) {
+            {$_ -in '.exe', '.msi'} { return "⚙️" }
+            {$_ -in '.bat', '.cmd', '.ps1', '.sh'} { return "📜" }
+            {$_ -in '.txt', '.md', '.readme', '.log'} { return "📄" }
+            {$_ -in '.json', '.xml', '.yaml', '.yml', '.config'} { return "🔧" }
+            {$_ -in '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico'} { return "🖼️" }
+            {$_ -in '.mp3', '.wav', '.mp4', '.avi', '.mkv', '.mov'} { return "🎵" }
+            {$_ -in '.zip', '.rar', '.7z', '.tar', '.gz'} { return "📦" }
+            {$_ -in '.cs', '.js', '.ts', '.py', '.cpp', '.h', '.css', '.html'} { return "💻" }
+            {$_ -in '.dll', '.lib', '.so'} { return "🔗" }
+            {$_ -in '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'} { return "📋" }
+            default { return "📄" }
+        }
+    }
+    
+    # Function to format file size
+    function Format-FileSize {
+        param([long]$Size)
+        if ($Size -eq 0) { return "0 B" }
+        $sizes = @('B', 'KB', 'MB', 'GB', 'TB')
+        $order = 0
+        while ($Size -ge 1024 -and $order -lt $sizes.Count - 1) {
+            $order++
+            $Size = $Size / 1024
+        }
+        return "{0:N1} {1}" -f $Size, $sizes[$order]
+    }
+    
+    # Display header
     Write-Host ""
+    Write-Host "Directory: " -NoNewline -ForegroundColor DarkGray
+    Write-Host (Resolve-Path $Path).Path -ForegroundColor Cyan
+    Write-Host ""
+    
+    # Create structured table output
+    $tableData = @()
+    
+    # Add directories first
+    foreach ($dir in $directories) {
+        $color = Get-FileColor -Extension "" -IsDirectory $true
+        $symbol = Get-FileSymbol -Extension "" -IsDirectory $true
+        
+        $tableData += [PSCustomObject]@{
+            Symbol = $symbol
+            Type = "DIR"
+            Name = $dir.Name
+            Size = "<DIR>"
+            Modified = $dir.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+            Color = $color
+            IsDirectory = $true
+        }
+    }
+    
+    # Add files
+    foreach ($file in $files) {
+        $color = Get-FileColor -Extension $file.Extension -IsDirectory $false
+        $symbol = Get-FileSymbol -Extension $file.Extension -IsDirectory $false
+        
+        $tableData += [PSCustomObject]@{
+            Symbol = $symbol
+            Type = $file.Extension.ToUpper().TrimStart('.')
+            Name = $file.Name
+            Size = Format-FileSize $file.Length
+            Modified = $file.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+            Color = $color
+            IsDirectory = $false
+        }
+    }
+    
+    # Display table header
+    Write-Host "  Type  " -NoNewline -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host " Name".PadRight(35) -NoNewline -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host " Size".PadRight(12) -NoNewline -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host " Modified".PadRight(18) -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host "─" * 75 -ForegroundColor DarkGray
+    
+    # Display each item with colors
+    foreach ($item in $tableData) {
+        # Type column (6 chars)
+        if ($item.IsDirectory) {
+            Write-Host " DIR " -NoNewline -ForegroundColor White -BackgroundColor Blue
+        } else {
+            Write-Host (" " + $item.Type).PadRight(5).Substring(0,5) -NoNewline -ForegroundColor Black -BackgroundColor Gray
+        }
+        Write-Host " " -NoNewline
+        
+        # Name column (35 chars) with color coding
+        $displayName = if ($item.Name.Length -gt 34) { $item.Name.Substring(0,31) + "..." } else { $item.Name }
+        Write-Host $displayName.PadRight(35) -NoNewline -ForegroundColor $item.Color
+        
+        # Size column (12 chars)
+        Write-Host $item.Size.PadRight(12) -NoNewline -ForegroundColor DarkYellow
+        
+        # Modified column (18 chars)
+        Write-Host $item.Modified -ForegroundColor DarkGray
+    }
+    
+    # Display summary
+    Write-Host ""
+    Write-Host "─" * 75 -ForegroundColor DarkGray
     Write-Host "Summary: " -ForegroundColor DarkGray -NoNewline
-    Write-Host "$dirs directories, $files files" -ForegroundColor Cyan
+    Write-Host "$($directories.Count) directories" -ForegroundColor Blue -NoNewline
+    Write-Host ", " -ForegroundColor DarkGray -NoNewline
+    Write-Host "$($files.Count) files" -ForegroundColor Cyan
+    
+    if ($files.Count -gt 0) {
+        $totalSize = ($files | Measure-Object Length -Sum).Sum
+        Write-Host "Total size: " -ForegroundColor DarkGray -NoNewline
+        Write-Host (Format-FileSize $totalSize) -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
+
+# Function to show file type color legend
+function Show-FileColorLegend {
+    Write-Host ""
+    Write-Host "File Type Color Legend:" -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host "─" * 50 -ForegroundColor DarkGray
+    
+    Write-Host "📁 Directories" -ForegroundColor Blue
+    Write-Host "⚙️ Executables (.exe, .msi)" -ForegroundColor Green
+    Write-Host "📜 Scripts (.bat, .cmd, .ps1, .sh)" -ForegroundColor Green
+    Write-Host "📄 Text files (.txt, .md, .log)" -ForegroundColor White
+    Write-Host "🔧 Config files (.json, .xml, .yaml)" -ForegroundColor Yellow
+    Write-Host "🖼️ Images (.jpg, .png, .gif)" -ForegroundColor Magenta
+    Write-Host "🎵 Media (.mp3, .mp4, .avi)" -ForegroundColor DarkMagenta
+    Write-Host "📦 Archives (.zip, .rar, .7z)" -ForegroundColor Red
+    Write-Host "💻 Source code (.cs, .js, .py, .cpp)" -ForegroundColor Cyan
+    Write-Host "🔗 Libraries (.dll, .lib, .so)" -ForegroundColor DarkRed
+    Write-Host "📋 Documents (.pdf, .doc, .xls)" -ForegroundColor DarkYellow
+    Write-Host "📄 Other files" -ForegroundColor Gray
+    Write-Host ""
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
