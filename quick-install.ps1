@@ -294,40 +294,105 @@ try {
     # Cross-compatibility: Ensure profile is available in both PowerShell versions
     Log "Ensuring cross-compatibility between PowerShell versions..." "STEP"
     try {
-        $coreProfileDir = Split-Path $PROFILE -Parent
-        $winPSProfileDir = $coreProfileDir -replace 'PowerShell$', 'WindowsPowerShell'
+        # Define both profile directories
+        $documentsPath = [Environment]::GetFolderPath("MyDocuments")
+        $coreProfileDir = "$documentsPath\PowerShell"
+        $winPSProfileDir = "$documentsPath\WindowsPowerShell"
         
-        # If we installed to Windows PowerShell but PowerShell Core exists
-        if ($profileDir -like "*WindowsPowerShell*" -and (Test-Path (Split-Path $coreProfileDir))) {
-            if (-not (Test-Path $coreProfileDir)) {
-                New-Item -ItemType Directory -Path $coreProfileDir -Force | Out-Null
+        # Always install to both versions if they exist or can be created
+        $targetDirs = @()
+        
+        # Check for PowerShell Core (7+)
+        if ((Get-Command pwsh -ErrorAction SilentlyContinue) -or (Test-Path "$env:ProgramFiles\PowerShell\*\pwsh.exe")) {
+            $targetDirs += @{Path = $coreProfileDir; Name = "PowerShell Core"}
+        }
+        
+        # Check for Windows PowerShell (5.1)
+        if ((Get-Command powershell -ErrorAction SilentlyContinue) -or (Test-Path "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe")) {
+            $targetDirs += @{Path = $winPSProfileDir; Name = "Windows PowerShell"}
+        }
+        
+        foreach ($target in $targetDirs) {
+            $targetPath = $target.Path
+            $targetName = $target.Name
+            
+            # Skip if this is the directory we already installed to
+            if ($targetPath -eq $profileDir) {
+                Log "$targetName profile already installed (primary installation)" "OK"
+                continue
             }
-            $coreProfile = "$coreProfileDir\Microsoft.PowerShell_profile.ps1"
-            if (-not (Test-Path $coreProfile)) {
-                Copy-Item $PROFILE $coreProfile -Force -ErrorAction SilentlyContinue
-                Copy-Item "$profileDir\*.json" $coreProfileDir -Force -ErrorAction SilentlyContinue
-                if (Test-Path "$profileDir\Modules") {
-                    Copy-Item "$profileDir\Modules" $coreProfileDir -Recurse -Force -ErrorAction SilentlyContinue
+            
+            Log "Installing profile for $targetName..." "INFO"
+            
+            # Create target directory if it doesn't exist
+            if (-not (Test-Path $targetPath)) {
+                New-Item -ItemType Directory -Path $targetPath -Force | Out-Null
+                Log "Created $targetName profile directory" "OK"
+            }
+            
+            # Copy profile
+            $targetProfile = "$targetPath\Microsoft.PowerShell_profile.ps1"
+            try {
+                # Backup existing profile if it exists
+                if (Test-Path $targetProfile) {
+                    Copy-Item $targetProfile "$targetProfile.bak" -Force -ErrorAction SilentlyContinue
+                    Log "Backed up existing $targetName profile" "OK"
                 }
-                Log "Profile also copied to PowerShell Core directory for compatibility" "OK"
+                
+                # Copy the profile with UTF8 encoding
+                $content = Get-Content $PROFILE -Raw -Encoding UTF8
+                [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
+                Log "$targetName profile copied successfully" "OK"
+            } catch {
+                Log "Warning: Could not copy profile to $targetName - $($_.Exception.Message)" "WARN"
+                continue
+            }
+            
+            # Copy theme files
+            try {
+                $themeFiles = Get-ChildItem "$profileDir\*.json" -ErrorAction SilentlyContinue
+                foreach ($theme in $themeFiles) {
+                    Copy-Item $theme.FullName "$targetPath\$($theme.Name)" -Force -ErrorAction SilentlyContinue
+                }
+                if ($themeFiles.Count -gt 0) {
+                    Log "$targetName theme files copied ($($themeFiles.Count) files)" "OK"
+                }
+            } catch {
+                Log "Warning: Could not copy theme files to $targetName" "WARN"
+            }
+            
+            # Copy modules
+            try {
+                if (Test-Path "$profileDir\Modules") {
+                    $targetModules = "$targetPath\Modules"
+                    if (Test-Path $targetModules) {
+                        # Merge modules instead of replacing
+                        $srcModules = Get-ChildItem "$profileDir\Modules" -Directory
+                        foreach ($module in $srcModules) {
+                            $dstModulePath = "$targetModules\$($module.Name)"
+                            if (-not (Test-Path $dstModulePath)) {
+                                Copy-Item $module.FullName $dstModulePath -Recurse -Force -ErrorAction SilentlyContinue
+                            }
+                        }
+                        Log "$targetName modules merged successfully" "OK"
+                    } else {
+                        Copy-Item "$profileDir\Modules" $targetModules -Recurse -Force -ErrorAction SilentlyContinue
+                        Log "$targetName modules copied successfully" "OK"
+                    }
+                }
+            } catch {
+                Log "Warning: Could not copy modules to $targetName" "WARN"
             }
         }
         
-        # If we installed to PowerShell Core but Windows PowerShell exists
-        if ($profileDir -like "*PowerShell$" -and (Test-Path (Split-Path $winPSProfileDir))) {
-            if (-not (Test-Path $winPSProfileDir)) {
-                New-Item -ItemType Directory -Path $winPSProfileDir -Force | Out-Null
-            }
-            $winPSProfile = "$winPSProfileDir\Microsoft.PowerShell_profile.ps1"
-            if (-not (Test-Path $winPSProfile)) {
-                Copy-Item $PROFILE $winPSProfile -Force -ErrorAction SilentlyContinue
-                Copy-Item "$profileDir\*.json" $winPSProfileDir -Force -ErrorAction SilentlyContinue
-                if (Test-Path "$profileDir\Modules") {
-                    Copy-Item "$profileDir\Modules" $winPSProfileDir -Recurse -Force -ErrorAction SilentlyContinue
-                }
-                Log "Profile also copied to Windows PowerShell directory for compatibility" "OK"
-            }
+        if ($targetDirs.Count -gt 1) {
+            Log "Profile installed for both PowerShell versions for maximum compatibility" "OK"
+        } elseif ($targetDirs.Count -eq 1) {
+            Log "Profile installed for available PowerShell version" "OK"
+        } else {
+            Log "Warning: No PowerShell installations detected for cross-compatibility" "WARN"
         }
+        
     } catch {
         Log "Warning: Could not ensure cross-compatibility - $($_.Exception.Message)" "WARN"
     }
