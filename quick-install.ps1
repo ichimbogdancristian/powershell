@@ -1,4 +1,4 @@
-# ═══════════════════════════════════════════════════════════════════════════════
+﻿# ═══════════════════════════════════════════════════════════════════════════════
 # PowerShell Enhanced Profile - Ultra Quick Install
 # Author: Bogdan Ichim
 # One-liner installer for PowerShell enhanced profile
@@ -177,7 +177,6 @@ try {
             if (Test-Path $tempPath) {
                 try {
                     Remove-Item $tempPath -Recurse -Force -ErrorAction SilentlyContinue
-                    Log "Cleaned: $tempPath" "INFO"
                 } catch {
                     # Silently continue if cleanup fails
                 }
@@ -195,7 +194,6 @@ try {
             if (Test-Path $dir) {
                 try {
                     Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
-                    Log "Removed temp directory: $dir" "INFO"
                 } catch {
                     # Silently continue if cleanup fails
                 }
