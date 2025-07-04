@@ -4,65 +4,169 @@
 # One-liner installer for PowerShell enhanced profile
 # ═══════════════════════════════════════════════════════════════════════════════
 
-param([switch]$Silent)
+param([switch]$Silent, [switch]$Verbose)
 
 # Suppress all errors and warnings for silent operation
-if ($Silent) { $ErrorActionPreference = "SilentlyContinue"; $WarningPreference = "SilentlyContinue" }
+if ($Silent) { 
+    $ErrorActionPreference = "SilentlyContinue"
+    $WarningPreference = "SilentlyContinue" 
+} else {
+    $ErrorActionPreference = "Continue"
+    $VerbosePreference = if ($Verbose) { "Continue" } else { "SilentlyContinue" }
+}
 
 function Log($msg, $type="INFO") {
-    if (-not $Silent) { Write-Host "[$type] $msg" -ForegroundColor $(if($type -eq "OK"){"Green"}elseif($type -eq "WARN"){"Yellow"}else{"Cyan"}) }
+    $color = switch($type) {
+        "OK" { "Green" }
+        "WARN" { "Yellow" } 
+        "ERROR" { "Red" }
+        "STEP" { "Cyan" }
+        default { "White" }
+    }
+    
+    if (-not $Silent) { 
+        Write-Host "[$type] $msg" -ForegroundColor $color
+    }
+    
+    # Also write to a log file for debugging
+    $logMsg = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$type] $msg"
+    Add-Content -Path "$PSScriptRoot\detailed-install.log" -Value $logMsg -ErrorAction SilentlyContinue
 }
 
 try {
+    Log "Starting PowerShell profile installation..." "STEP"
+    
     # Set execution policy
-    Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force 2>$null
+    Log "Setting execution policy to RemoteSigned..." "STEP"
+    try {
+        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        Log "Execution policy updated successfully" "OK"
+    } catch {
+        Log "Warning: Could not set execution policy - $($_.Exception.Message)" "WARN"
+    }
 
     # Install essential modules
-    "PSReadLine","posh-git","Terminal-Icons" | ForEach-Object {
-        if (-not (Get-Module $_ -ListAvailable -ErrorAction SilentlyContinue)) {
-            Log "Installing $_..."
-            Install-Module $_ -Force -AllowClobber -Scope CurrentUser -ErrorAction SilentlyContinue
+    Log "Installing essential PowerShell modules..." "STEP"
+    $modules = @("PSReadLine","posh-git","Terminal-Icons")
+    foreach ($module in $modules) {
+        Log "Checking module: $module" "INFO"
+        if (-not (Get-Module $module -ListAvailable -ErrorAction SilentlyContinue)) {
+            Log "Installing $module..." "INFO"
+            try {
+                Install-Module $module -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop
+                Log "$module installed successfully" "OK"
+            } catch {
+                Log "Failed to install $module - $($_.Exception.Message)" "ERROR"
+            }
+        } else {
+            Log "$module already available" "OK"
         }
-        Log "$_ ready" "OK"
     }
 
     # Install tools via winget
+    Log "Installing additional tools via winget..." "STEP"
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        @(@{n="oh-my-posh";i="JanDeDobbeleer.OhMyPosh"},@{n="git";i="Git.Git"}) | ForEach-Object {
-            if (-not (Get-Command $_.n -ErrorAction SilentlyContinue)) {
-                Log "Installing $($_.n)..."
-                winget install $_.i --silent --accept-source-agreements --accept-package-agreements 2>$null | Out-Null
+        $tools = @(
+            @{name="oh-my-posh"; id="JanDeDobbeleer.OhMyPosh"},
+            @{name="git"; id="Git.Git"}
+        )
+        foreach ($tool in $tools) {
+            Log "Checking tool: $($tool.name)" "INFO"
+            if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
+                Log "Installing $($tool.name)..." "INFO"
+                try {
+                    $result = winget install $tool.id --silent --accept-source-agreements --accept-package-agreements 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Log "$($tool.name) installed successfully" "OK"
+                    } else {
+                        Log "$($tool.name) installation may have issues (exit code: $LASTEXITCODE)" "WARN"
+                    }
+                } catch {
+                    Log "Failed to install $($tool.name) - $($_.Exception.Message)" "ERROR"
+                }
+            } else {
+                Log "$($tool.name) already available" "OK"
             }
-            Log "$($_.n) ready" "OK"
         }
+    } else {
+        Log "winget not available - skipping tool installation" "WARN"
     }
 
     # Setup profile
+    Log "Setting up PowerShell profile..." "STEP"
     $profileDir = Split-Path $PROFILE -Parent
-    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
+    Log "Profile directory: $profileDir" "INFO"
+    
+    if (-not (Test-Path $profileDir)) { 
+        Log "Creating profile directory..." "INFO"
+        New-Item -ItemType Directory -Path $profileDir -Force | Out-Null 
+        Log "Profile directory created" "OK"
+    }
     
     # Backup existing
-    if (Test-Path $PROFILE) { Copy-Item $PROFILE "$PROFILE.bak" -ErrorAction SilentlyContinue }
+    if (Test-Path $PROFILE) { 
+        Log "Backing up existing profile..." "INFO"
+        Copy-Item $PROFILE "$PROFILE.bak" -ErrorAction SilentlyContinue 
+        Log "Profile backed up to $PROFILE.bak" "OK"
+    }
     
     # Copy files
-    @("Microsoft.PowerShell_profile.ps1","oh-my-posh-default.json") | ForEach-Object {
-        $src = "$PSScriptRoot\$_"
-        $dst = if($_ -like "*.ps1"){$PROFILE}else{"$profileDir\$_"}
-        if (Test-Path $src) { Copy-Item $src $dst -Force -ErrorAction SilentlyContinue }
+    Log "Copying profile files..." "STEP"
+    $filesToCopy = @("Microsoft.PowerShell_profile.ps1","oh-my-posh-default.json")
+    foreach ($file in $filesToCopy) {
+        $src = "$PSScriptRoot\$file"
+        $dst = if($file -like "*.ps1"){$PROFILE}else{"$profileDir\$file"}
+        
+        Log "Copying $file..." "INFO"
+        if (Test-Path $src) { 
+            try {
+                Copy-Item $src $dst -Force -ErrorAction Stop
+                Log "$file copied successfully" "OK"
+            } catch {
+                Log "Failed to copy $file - $($_.Exception.Message)" "ERROR"
+            }
+        } else {
+            Log "$file not found in source directory" "WARN"
+        }
     }
     
     # Copy modules
+    Log "Installing bundled modules..." "STEP"
     $srcMod = "$PSScriptRoot\Modules"
     if (Test-Path $srcMod) {
         $dstMod = "$profileDir\Modules"
-        if (Test-Path $dstMod) { Remove-Item $dstMod -Recurse -Force -ErrorAction SilentlyContinue }
-        Copy-Item $srcMod $dstMod -Recurse -Force -ErrorAction SilentlyContinue
+        Log "Copying modules from $srcMod to $dstMod" "INFO"
+        
+        if (Test-Path $dstMod) { 
+            Log "Removing existing modules directory..." "INFO"
+            Remove-Item $dstMod -Recurse -Force -ErrorAction SilentlyContinue 
+        }
+        
+        try {
+            Copy-Item $srcMod $dstMod -Recurse -Force -ErrorAction Stop
+            Log "Modules copied successfully" "OK"
+        } catch {
+            Log "Failed to copy modules - $($_.Exception.Message)" "ERROR"
+        }
+    } else {
+        Log "No bundled modules found to install" "INFO"
     }
 
-    Log "Profile installed successfully!" "OK"
-    if (-not $Silent) { Write-Host "Restart PowerShell to activate. Try: neofetch, ll, health" -ForegroundColor Green }
+    Log "Profile installation completed successfully!" "OK"
+    if (-not $Silent) { 
+        Write-Host "`nInstallation Summary:" -ForegroundColor Cyan
+        Write-Host "✓ PowerShell profile configured" -ForegroundColor Green
+        Write-Host "✓ Essential modules installed" -ForegroundColor Green  
+        Write-Host "✓ Configuration files copied" -ForegroundColor Green
+        Write-Host "`nNext: Restart PowerShell and try: neofetch, ll, health" -ForegroundColor Yellow
+    }
     
 } catch {
-    Log "Installation failed: $($_.Exception.Message)" "WARN"
+    Log "Installation failed: $($_.Exception.Message)" "ERROR"
+    Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"
+    if (-not $Silent) {
+        Write-Host "`nInstallation failed with error:" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+    }
     exit 1
 }

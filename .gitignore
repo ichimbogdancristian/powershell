@@ -21,6 +21,9 @@ local-settings.ps1
 
 # Log files
 *.log
+install-log-*.txt
+install-errors.txt
+detailed-install.log
 
 # VSCode settings (optional - uncomment if you don't want to share)
 # .vscode/
