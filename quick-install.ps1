@@ -6,12 +6,13 @@
 
 param([switch]$Silent, [switch]$Verbose)
 
-# Suppress all errors and warnings for silent operation
+# Configure output preferences
 if ($Silent) { 
     $ErrorActionPreference = "SilentlyContinue"
     $WarningPreference = "SilentlyContinue" 
 } else {
     $ErrorActionPreference = "Continue"
+    $WarningPreference = "Continue"
     $VerbosePreference = if ($Verbose) { "Continue" } else { "SilentlyContinue" }
 }
 
@@ -24,13 +25,10 @@ function Log($msg, $type="INFO") {
         default { "White" }
     }
     
+    # Always show output unless explicitly silenced
     if (-not $Silent) { 
         Write-Host "[$type] $msg" -ForegroundColor $color
     }
-    
-    # Also write to a log file for debugging
-    $logMsg = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$type] $msg"
-    Add-Content -Path "$PSScriptRoot\detailed-install.log" -Value $logMsg -ErrorAction SilentlyContinue
 }
 
 try {
