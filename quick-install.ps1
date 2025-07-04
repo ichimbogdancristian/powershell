@@ -92,8 +92,33 @@ try {
 
     # Setup profile
     Log "Setting up PowerShell profile..." "STEP"
+    
+    # Detect correct PowerShell profile directory
     $profileDir = Split-Path $PROFILE -Parent
     Log "Profile directory: $profileDir" "INFO"
+    
+    # Check if user has existing PowerShell configurations
+    $hasExistingConfig = $false
+    $existingThemes = @()
+    $existingScripts = @()
+    
+    if (Test-Path $profileDir) {
+        # Check for existing oh-my-posh themes
+        $themeFiles = Get-ChildItem "$profileDir\*.json" -ErrorAction SilentlyContinue
+        if ($themeFiles) {
+            $existingThemes = $themeFiles.Name
+            $hasExistingConfig = $true
+            Log "Found existing oh-my-posh themes: $($existingThemes -join ', ')" "INFO"
+        }
+        
+        # Check for existing custom scripts
+        $scriptFiles = Get-ChildItem "$profileDir\*.ps1" -Exclude "Microsoft.PowerShell_profile.ps1" -ErrorAction SilentlyContinue
+        if ($scriptFiles) {
+            $existingScripts = $scriptFiles.Name
+            $hasExistingConfig = $true
+            Log "Found existing PowerShell scripts: $($existingScripts -join ', ')" "INFO"
+        }
+    }
     
     if (-not (Test-Path $profileDir)) { 
         Log "Creating profile directory..." "INFO"
@@ -101,11 +126,33 @@ try {
         Log "Profile directory created" "OK"
     }
     
-    # Backup existing
-    if (Test-Path $PROFILE) { 
-        Log "Backing up existing profile..." "INFO"
-        Copy-Item $PROFILE "$PROFILE.bak" -ErrorAction SilentlyContinue 
-        Log "Profile backed up to $PROFILE.bak" "OK"
+    # Create comprehensive backup if existing configuration found
+    if ($hasExistingConfig) {
+        $backupDir = "$profileDir\backup-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
+        Log "Creating backup of existing configuration..." "INFO"
+        New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+        
+        # Backup existing profile
+        if (Test-Path $PROFILE) {
+            Copy-Item $PROFILE "$backupDir\Microsoft.PowerShell_profile.ps1.bak" -ErrorAction SilentlyContinue
+        }
+        
+        # Backup existing themes and scripts
+        foreach ($theme in $existingThemes) {
+            Copy-Item "$profileDir\$theme" "$backupDir\$theme" -ErrorAction SilentlyContinue
+        }
+        foreach ($script in $existingScripts) {
+            Copy-Item "$profileDir\$script" "$backupDir\$script" -ErrorAction SilentlyContinue
+        }
+        
+        Log "Backup created at: $backupDir" "OK"
+    } else {
+        # Standard backup for just the profile
+        if (Test-Path $PROFILE) { 
+            Log "Backing up existing profile..." "INFO"
+            Copy-Item $PROFILE "$PROFILE.bak" -ErrorAction SilentlyContinue 
+            Log "Profile backed up to $PROFILE.bak" "OK"
+        }
     }
     
     # Copy files
@@ -115,7 +162,23 @@ try {
         $src = "$PSScriptRoot\$file"
         $dst = if($file -like "*.ps1"){$PROFILE}else{"$profileDir\$file"}
         
-        Log "Copying $file..." "INFO"
+        # Special handling for oh-my-posh theme files
+        if ($file -like "*.json" -and $hasExistingConfig) {
+            # Don't overwrite existing theme if user has custom themes
+            if ($existingThemes -contains $file) {
+                Log "Skipping $file - user has existing theme (backed up)" "INFO"
+                continue
+            } else {
+                # Copy with a different name to avoid conflicts
+                $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file)
+                $extension = [System.IO.Path]::GetExtension($file)
+                $dst = "$profileDir\$baseName-default$extension"
+                Log "Copying $file as $baseName-default$extension to avoid conflicts..." "INFO"
+            }
+        } else {
+            Log "Copying $file..." "INFO"
+        }
+        
         if (Test-Path $src) { 
             try {
                 # Use UTF8 encoding for PowerShell files to preserve emojis
@@ -149,16 +212,38 @@ try {
         $dstMod = "$profileDir\Modules"
         Log "Copying modules from $srcMod to $dstMod" "INFO"
         
-        if (Test-Path $dstMod) { 
-            Log "Removing existing modules directory..." "INFO"
-            Remove-Item $dstMod -Recurse -Force -ErrorAction SilentlyContinue 
-        }
-        
-        try {
-            Copy-Item $srcMod $dstMod -Recurse -Force -ErrorAction Stop
-            Log "Modules copied successfully" "OK"
-        } catch {
-            Log "Failed to copy modules - $($_.Exception.Message)" "ERROR"
+        # If user has existing modules, be more careful
+        if ($hasExistingConfig -and (Test-Path $dstMod)) {
+            Log "Existing modules directory found - merging instead of replacing..." "INFO"
+            
+            # Copy each module individually to avoid overwriting user modules
+            $srcModules = Get-ChildItem $srcMod -Directory
+            foreach ($module in $srcModules) {
+                $dstModulePath = "$dstMod\$($module.Name)"
+                if (Test-Path $dstModulePath) {
+                    Log "Module $($module.Name) already exists - skipping" "INFO"
+                } else {
+                    try {
+                        Copy-Item $module.FullName $dstModulePath -Recurse -Force -ErrorAction Stop
+                        Log "Module $($module.Name) copied successfully" "OK"
+                    } catch {
+                        Log "Failed to copy module $($module.Name) - $($_.Exception.Message)" "ERROR"
+                    }
+                }
+            }
+        } else {
+            # Standard behavior for new installations
+            if (Test-Path $dstMod) { 
+                Log "Removing existing modules directory..." "INFO"
+                Remove-Item $dstMod -Recurse -Force -ErrorAction SilentlyContinue 
+            }
+            
+            try {
+                Copy-Item $srcMod $dstMod -Recurse -Force -ErrorAction Stop
+                Log "Modules copied successfully" "OK"
+            } catch {
+                Log "Failed to copy modules - $($_.Exception.Message)" "ERROR"
+            }
         }
     } else {
         Log "No bundled modules found to install" "INFO"
@@ -171,6 +256,19 @@ try {
         Write-Host "✓ PowerShell profile configured" -ForegroundColor Green
         Write-Host "✓ Essential modules installed" -ForegroundColor Green  
         Write-Host "✓ Configuration files copied" -ForegroundColor Green
+        
+        if ($hasExistingConfig) {
+            Write-Host ""
+            Write-Host "Existing Configuration Preserved:" -ForegroundColor Yellow
+            if ($existingThemes.Count -gt 0) {
+                Write-Host "✓ Oh-My-Posh themes: $($existingThemes -join ', ')" -ForegroundColor Green
+            }
+            if ($existingScripts.Count -gt 0) {
+                Write-Host "✓ Custom scripts: $($existingScripts -join ', ')" -ForegroundColor Green
+            }
+            Write-Host "✓ Full backup created in: backup-$(Get-Date -Format 'yyyy-MM-dd-HHmm')" -ForegroundColor Green
+        }
+        
         Write-Host ""
         Write-Host "Next: Restart PowerShell and try: neofetch, ll, health" -ForegroundColor Yellow
     }
