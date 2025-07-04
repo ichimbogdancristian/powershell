@@ -8,47 +8,92 @@
 # Module Imports
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Import required modules
-Import-Module PSReadLine -Force
-Import-Module posh-git -Force
-Import-Module Terminal-Icons -Force
+# Import required modules with error handling
+try { Import-Module PSReadLine -Force -ErrorAction SilentlyContinue } catch { }
+try { Import-Module posh-git -Force -ErrorAction SilentlyContinue } catch { }
+try { Import-Module Terminal-Icons -Force -ErrorAction SilentlyContinue } catch { }
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PSReadLine Configuration (Enhanced History & Autocompletion)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Enable advanced history search
-Set-PSReadLineOption -PredictionSource History
-# Use different prediction styles based on environment
-if ($env:TERM_PROGRAM -eq "vscode") {
-    Set-PSReadLineOption -PredictionViewStyle InlineView  # Less intrusive in VS Code
-    Set-PSReadLineOption -CompletionQueryItems 50  # Reduced for better performance
-} else {
-    Set-PSReadLineOption -PredictionViewStyle ListView  # Full list view in regular PowerShell
-    Set-PSReadLineOption -CompletionQueryItems 100
+# Check PSReadLine version and configure accordingly
+$psReadLineModule = Get-Module PSReadLine
+if ($psReadLineModule) {
+    $psReadLineVersion = $psReadLineModule.Version
+    
+    # Advanced prediction features only available in PSReadLine 2.1+
+    if ($psReadLineVersion -ge [version]"2.1.0") {
+        try {
+            Set-PSReadLineOption -PredictionSource History
+            # Use different prediction styles based on environment
+            if ($env:TERM_PROGRAM -eq "vscode") {
+                Set-PSReadLineOption -PredictionViewStyle InlineView  # Less intrusive in VS Code
+            } else {
+                Set-PSReadLineOption -PredictionViewStyle ListView  # Full list view in regular PowerShell
+            }
+        } catch {
+            Write-Warning "Some PSReadLine prediction features are not available in this version."
+        }
+    } else {
+        # For older PSReadLine versions, just enable basic history search
+        try {
+            Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+            Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+        } catch { }
+    }
+    
+    # These options should be available in most PSReadLine versions
+    try {
+        if ($env:TERM_PROGRAM -eq "vscode") {
+            Set-PSReadLineOption -CompletionQueryItems 50  # Reduced for better performance
+        } else {
+            Set-PSReadLineOption -CompletionQueryItems 100
+        }
+    } catch { }
 }
 Set-PSReadLineOption -EditMode Windows
 
-# Advanced completion behavior
-Set-PSReadLineOption -MaximumHistoryCount 4000
-Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+# Advanced completion behavior (available in most versions)
+try {
+    Set-PSReadLineOption -MaximumHistoryCount 4000
+    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+} catch { }
 
-# Colors for different types of input
-Set-PSReadLineOption -Colors @{
-    Command            = 'Cyan'
-    Parameter          = 'Gray'
-    Operator           = 'White'
-    Variable           = 'Green'
-    String             = 'Yellow'
-    Number             = 'Red'
-    Type               = 'DarkCyan'
-    Comment            = 'DarkGreen'
-    Keyword            = 'Blue'
-    Error              = 'DarkRed'
-    Selection          = 'DarkBlue'
-    InlinePrediction   = 'DarkGray'
-    ListPrediction     = 'DarkYellow'
-    ListPredictionSelected = 'DarkGreen'
+# Colors for different types of input (with error handling)
+try {
+    Set-PSReadLineOption -Colors @{
+        Command            = 'Cyan'
+        Parameter          = 'Gray'
+        Operator           = 'White'
+        Variable           = 'Green'
+        String             = 'Yellow'
+        Number             = 'Red'
+        Type               = 'DarkCyan'
+        Comment            = 'DarkGreen'
+        Keyword            = 'Blue'
+        Error              = 'DarkRed'
+        Selection          = 'DarkBlue'
+        InlinePrediction   = 'DarkGray'
+        ListPrediction     = 'DarkYellow'
+        ListPredictionSelected = 'DarkGreen'
+    }
+} catch {
+    # Fallback for older PSReadLine versions
+    try {
+        Set-PSReadLineOption -Colors @{
+            Command   = 'Cyan'
+            Parameter = 'Gray'
+            Operator  = 'White'
+            Variable  = 'Green'
+            String    = 'Yellow'
+            Number    = 'Red'
+            Type      = 'DarkCyan'
+            Comment   = 'DarkGreen'
+            Keyword   = 'Blue'
+            Error     = 'DarkRed'
+        }
+    } catch { }
 }
 
 # Key bindings for enhanced navigation
@@ -103,30 +148,37 @@ Set-Alias -Name ll -Value Get-ChildItemColorized
 Set-Alias -Name lld -Value Get-ChildItemDetailed  # Detailed view without colors
 Set-Alias -Name la -Value Get-ChildItemColorizedAll  # Show hidden files with colors
 Set-Alias -Name l -Value Get-ChildItemColorized
-Set-Alias -Name ls -Value Get-ChildItemColorized
-Set-Alias -Name dir -Value Get-ChildItemColorized  # Override default dir with colorized version
-Set-Alias -Name cat -Value Get-Content
+
+# Handle potentially protected aliases with try-catch (these may fail in some PowerShell versions)
+try { Set-Alias -Name ls -Value Get-ChildItemColorized -Force -ErrorAction SilentlyContinue } catch { }
+try { Set-Alias -Name dir -Value Get-ChildItemColorized -Force -ErrorAction SilentlyContinue } catch { }
+try { Set-Alias -Name cat -Value Get-Content -Force -ErrorAction SilentlyContinue } catch { }
+
 Set-Alias -Name grep -Value Select-String
 Set-Alias -Name find -Value Get-ChildItem
 Set-Alias -Name which -Value Get-Command
-Set-Alias -Name wget -Value Invoke-WebRequest
-Set-Alias -Name curl -Value Invoke-RestMethod
+
+try { Set-Alias -Name wget -Value Invoke-WebRequest -Force -ErrorAction SilentlyContinue } catch { }
+try { Set-Alias -Name curl -Value Invoke-RestMethod -Force -ErrorAction SilentlyContinue } catch { }
+
 Set-Alias -Name sudo -Value Start-Elevated
 Set-Alias -Name touch -Value New-Item
-Set-Alias -Name rm -Value Remove-Item
-Set-Alias -Name mv -Value Move-Item
-# Skip cp alias as it has AllScope option that cannot be removed
+
+# Handle potentially protected aliases with try-catch
+try { Set-Alias -Name rm -Value Remove-Item -Force -ErrorAction SilentlyContinue } catch { }
+try { Set-Alias -Name mv -Value Move-Item -Force -ErrorAction SilentlyContinue } catch { }
+
+# Skip cp and cd aliases as they have AllScope protection that cannot be overridden
 Set-Alias -Name mkdir -Value New-Directory
-Set-Alias -Name pwd -Value Get-Location
-# Skip cd alias as it has AllScope option that cannot be removed
+try { Set-Alias -Name pwd -Value Get-Location -Force -ErrorAction SilentlyContinue } catch { }
 
 # Process Management
-Set-Alias -Name ps -Value Get-Process
-Set-Alias -Name kill -Value Stop-Process
+try { Set-Alias -Name ps -Value Get-Process -Force -ErrorAction SilentlyContinue } catch { }
+try { Set-Alias -Name kill -Value Stop-Process -Force -ErrorAction SilentlyContinue } catch { }
 Set-Alias -Name top -Value Get-ProcessSorted
 
-# Network
-Set-Alias -Name ping -Value Test-Connection
+# Network (handle ping carefully as it might be protected)
+try { Set-Alias -Name ping -Value Test-Connection -Force -ErrorAction SilentlyContinue } catch { }
 Set-Alias -Name nslookup -Value Resolve-DnsName
 
 # Git shortcuts

@@ -66,7 +66,8 @@ try {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         $tools = @(
             @{name="oh-my-posh"; id="JanDeDobbeleer.OhMyPosh"},
-            @{name="git"; id="Git.Git"}
+            @{name="git"; id="Git.Git"},
+            @{name="zoxide"; id="ajeetdsouza.zoxide"}
         )
         foreach ($tool in $tools) {
             Log "Checking tool: $($tool.name)" "INFO"
@@ -221,7 +222,31 @@ try {
             foreach ($module in $srcModules) {
                 $dstModulePath = "$dstMod\$($module.Name)"
                 if (Test-Path $dstModulePath) {
-                    Log "Module $($module.Name) already exists - skipping" "INFO"
+                    Log "Module $($module.Name) already exists - updating with compatibility fixes..." "INFO"
+                    # For Terminal-Icons, make sure we have the format file
+                    if ($module.Name -eq "Terminal-Icons") {
+                        $formatFile = "$($module.FullName)\0.11.0\Terminal-Icons.format.ps1xml"
+                        $dstFormatFile = "$dstModulePath\0.11.0\Terminal-Icons.format.ps1xml"
+                        if ((Test-Path $formatFile) -and (-not (Test-Path $dstFormatFile))) {
+                            try {
+                                Copy-Item $formatFile $dstFormatFile -Force -ErrorAction Stop
+                                Log "Terminal-Icons format file added for compatibility" "OK"
+                            } catch {
+                                Log "Warning: Could not copy Terminal-Icons format file" "WARN"
+                            }
+                        }
+                        # Also update the manifest if needed
+                        $manifestFile = "$($module.FullName)\0.11.0\Terminal-Icons.psd1"
+                        $dstManifestFile = "$dstModulePath\0.11.0\Terminal-Icons.psd1"
+                        if (Test-Path $manifestFile) {
+                            try {
+                                Copy-Item $manifestFile $dstManifestFile -Force -ErrorAction Stop
+                                Log "Terminal-Icons manifest updated" "OK"
+                            } catch {
+                                Log "Warning: Could not update Terminal-Icons manifest" "WARN"
+                            }
+                        }
+                    }
                 } else {
                     try {
                         Copy-Item $module.FullName $dstModulePath -Recurse -Force -ErrorAction Stop
