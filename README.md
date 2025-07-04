@@ -4,12 +4,12 @@ A streamlined PowerShell profile with Linux-like aliases, system monitoring, and
 
 ## Quick Start
 
-**Ultra-fast installation (3 seconds):**
+**Ultra-fast installation (downloads from GitHub):**
 ```batch
 quick-setup.bat
 ```
 
-**Or with progress feedback:**
+**Or if you already have the repository:**
 ```powershell
 .\quick-install.ps1
 ```
