@@ -14,16 +14,6 @@ quick-setup.bat
 .\quick-install.ps1
 ```
 
-**Simple installation (minimal, for troubleshooting):**
-```powershell
-.\simple-install.ps1
-```
-
-**Test installation (with fresh profile):**
-```powershell
-.\test-install.ps1 -Clean
-```
-
 ## Features
 
 - **Linux-like aliases**: `ll`, `la`, `grep`, `find`, etc.
@@ -52,7 +42,6 @@ neofetch        # System information
 ll              # Enhanced directory listing
 health          # System health status
 help-profile    # Show all available commands
-.\verify-theme.ps1  # Verify Oh My Posh theme installation
 ```
 
 ## Theme Customization
@@ -83,9 +72,9 @@ oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\[theme-name].omp.json" | In
 3. Restart PowerShell after installation
 
 **No existing profile (fresh installation):**
-1. Use the simple installer: `.\simple-install.ps1`
-2. Or test with clean installation: `.\test-install.ps1 -Clean`
-3. Ensure PowerShell execution policy allows scripts: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
+1. Run the main installer: `.\quick-install.ps1`
+2. Ensure PowerShell execution policy allows scripts: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
+3. Restart PowerShell after installation
 
 **Icons not displaying:**
 1. Install a Nerd Font (recommended: FiraCode Nerd Font)
