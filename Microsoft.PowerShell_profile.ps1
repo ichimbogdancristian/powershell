@@ -523,6 +523,90 @@ function Get-NetworkConnections {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Clipboard Utilities (Enhancement 2)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Copy text to clipboard
+function Copy-ToClipboard {
+    param(
+        [Parameter(ValueFromPipeline)]
+        [string]$Text
+    )
+    process {
+        $Text | Set-Clipboard
+        Write-Host "Copied to clipboard!" -ForegroundColor Green
+    }
+}
+
+# Paste text from clipboard
+function Paste-FromClipboard {
+    $clip = Get-Clipboard
+    Write-Host $clip
+    return $clip
+}
+
+Set-Alias -Name copy -Value Copy-ToClipboard
+Set-Alias -Name paste -Value Paste-FromClipboard
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Enhanced History Search (Enhancement 3)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+function Search-History {
+    # Uses Out-GridView if available, otherwise simple search
+    if (Get-Command Out-GridView -ErrorAction SilentlyContinue) {
+        $selected = Get-History | Sort-Object Id -Descending | Select-Object -ExpandProperty CommandLine | Out-GridView -Title "Select command to run" -PassThru
+        if ($selected) {
+            Write-Host "Running: $selected" -ForegroundColor Cyan
+            Invoke-Expression $selected
+        }
+    } else {
+        Get-History | Sort-Object Id -Descending | Select-Object -First 20 | Format-Table Id, CommandLine
+    }
+}
+
+Set-Alias -Name hist -Value Search-History
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Git Enhancements (Enhancement 4)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Pretty git log graph
+function gitlg {
+    git log --oneline --graph --all --decorate
+}
+
+# Interactive git branch checkout (requires fzf)
+function gcof {
+    if (Get-Command fzf -ErrorAction SilentlyContinue) {
+        $branch = git branch --all --color=never | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" } | fzf --prompt="Checkout branch: "
+        if ($branch) {
+            $branchName = $branch -replace '^\* ', '' -replace 'remotes/', ''
+            git checkout $branchName
+        }
+    } else {
+        Write-Host "fzf not found. Please install fzf for interactive branch checkout." -ForegroundColor Yellow
+    }
+}
+
+# Interactive git stash apply (requires fzf)
+function gstashf {
+    if (Get-Command fzf -ErrorAction SilentlyContinue) {
+        $stash = git stash list | fzf --prompt="Apply stash: "
+        if ($stash) {
+            $stashId = $stash -split ':' | Select-Object -First 1
+            git stash apply $stashId
+        }
+    } else {
+        Write-Host "fzf not found. Please install fzf for interactive stash apply." -ForegroundColor Yellow
+    }
+}
+
+Set-Alias -Name gitlog -Value gitlg
+Set-Alias -Name gcof -Value gcof
+Set-Alias -Name gstashf -Value gstashf
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Auto-completion Enhancements
 # ═══════════════════════════════════════════════════════════════════════════════
 
