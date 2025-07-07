@@ -230,8 +230,7 @@ try { Set-Alias -Name ps -Value Get-Process -Force -ErrorAction SilentlyContinue
 try { Set-Alias -Name kill -Value Stop-Process -Force -ErrorAction SilentlyContinue } catch { }
 Set-Alias -Name top -Value Get-ProcessSorted
 
-# Network (handle ping carefully as it might be protected)
-try { Set-Alias -Name ping -Value Test-Connection -Force -ErrorAction SilentlyContinue } catch { }
+# Network
 Set-Alias -Name nslookup -Value Resolve-DnsName
 
 # Git shortcuts
