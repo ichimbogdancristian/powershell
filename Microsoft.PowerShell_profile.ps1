@@ -545,8 +545,8 @@ function Paste-FromClipboard {
     return $clip
 }
 
-Set-Alias -Name copy -Value Copy-ToClipboard
-Set-Alias -Name paste -Value Paste-FromClipboard
+New-Alias -Name copyclip -Value Copy-ToClipboard -Force
+New-Alias -Name pasteclip -Value Paste-FromClipboard -Force
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Enhanced History Search (Enhancement 3)
