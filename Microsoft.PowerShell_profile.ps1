@@ -523,82 +523,114 @@ function Get-NetworkConnections {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+
 # Clipboard Utilities (Enhancement 2)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Copy text to clipboard
-function Copy-ToClipboard {
-    param(
-        [Parameter(ValueFromPipeline)]
-        [string]$Text
-    )
-    process {
-        $Text | Set-Clipboard
-        Write-Host "Copied to clipboard!" -ForegroundColor Green
+if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
+    function Copy-ToClipboard {
+        param(
+            [Parameter(ValueFromPipeline)]
+            [string]$Text
+        )
+        process {
+            $Text | Set-Clipboard
+            Write-Host "Copied to clipboard!" -ForegroundColor Green
+        }
+    }
+} else {
+    function Copy-ToClipboard {
+        Write-Host "Set-Clipboard is not available. Please update PowerShell or install the required module." -ForegroundColor Yellow
     }
 }
 
-# Paste text from clipboard
-function Paste-FromClipboard {
-    $clip = Get-Clipboard
-    Write-Host $clip
-    return $clip
+if (Get-Command Get-Clipboard -ErrorAction SilentlyContinue) {
+    function Paste-FromClipboard {
+        $clip = Get-Clipboard
+        Write-Host $clip
+        return $clip
+    }
+} else {
+    function Paste-FromClipboard {
+        Write-Host "Get-Clipboard is not available. Please update PowerShell or install the required module." -ForegroundColor Yellow
+        return $null
+    }
 }
 
 New-Alias -Name copyclip -Value Copy-ToClipboard -Force
 New-Alias -Name pasteclip -Value Paste-FromClipboard -Force
 
 # ═══════════════════════════════════════════════════════════════════════════════
+
 # Enhanced History Search (Enhancement 3)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-function Search-History {
-    # Uses Out-GridView if available, otherwise simple search
-    if (Get-Command Out-GridView -ErrorAction SilentlyContinue) {
+if (Get-Command Out-GridView -ErrorAction SilentlyContinue) {
+    function Search-History {
         $selected = Get-History | Sort-Object Id -Descending | Select-Object -ExpandProperty CommandLine | Out-GridView -Title "Select command to run" -PassThru
         if ($selected) {
             Write-Host "Running: $selected" -ForegroundColor Cyan
             Invoke-Expression $selected
         }
-    } else {
+    }
+} elseif (Get-Command fzf -ErrorAction SilentlyContinue) {
+    function Search-History {
+        $selected = Get-History | Sort-Object Id -Descending | Select-Object -ExpandProperty CommandLine | fzf --prompt="History> "
+        if ($selected) {
+            Write-Host "Running: $selected" -ForegroundColor Cyan
+            Invoke-Expression $selected
+        }
+    }
+} else {
+    function Search-History {
         Get-History | Sort-Object Id -Descending | Select-Object -First 20 | Format-Table Id, CommandLine
+        Write-Host "Install 'Out-GridView' (Windows) or 'fzf' (cross-platform) for interactive history search." -ForegroundColor Yellow
     }
 }
 
 Set-Alias -Name hist -Value Search-History
 
 # ═══════════════════════════════════════════════════════════════════════════════
+
 # Git Enhancements (Enhancement 4)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Pretty git log graph
-function gitlg {
-    git log --oneline --graph --all --decorate
-}
-
-# Interactive git branch checkout (requires fzf)
-function gcof {
-    if (Get-Command fzf -ErrorAction SilentlyContinue) {
-        $branch = git branch --all --color=never | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" } | fzf --prompt="Checkout branch: "
-        if ($branch) {
-            $branchName = $branch -replace '^\* ', '' -replace 'remotes/', ''
-            git checkout $branchName
-        }
-    } else {
-        Write-Host "fzf not found. Please install fzf for interactive branch checkout." -ForegroundColor Yellow
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    function gitlg {
+        git log --oneline --graph --all --decorate
     }
-}
-
-# Interactive git stash apply (requires fzf)
-function gstashf {
     if (Get-Command fzf -ErrorAction SilentlyContinue) {
-        $stash = git stash list | fzf --prompt="Apply stash: "
-        if ($stash) {
-            $stashId = $stash -split ':' | Select-Object -First 1
-            git stash apply $stashId
+        function gcof {
+            $branch = git branch --all --color=never | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" } | fzf --prompt="Checkout branch: "
+            if ($branch) {
+                $branchName = $branch -replace '^\* ', '' -replace 'remotes/', ''
+                git checkout $branchName
+            }
+        }
+        function gstashf {
+            $stash = git stash list | fzf --prompt="Apply stash: "
+            if ($stash) {
+                $stashId = $stash -split ':' | Select-Object -First 1
+                git stash apply $stashId
+            }
         }
     } else {
-        Write-Host "fzf not found. Please install fzf for interactive stash apply." -ForegroundColor Yellow
+        function gcof {
+            Write-Host "fzf not found. Please install fzf for interactive branch checkout." -ForegroundColor Yellow
+        }
+        function gstashf {
+            Write-Host "fzf not found. Please install fzf for interactive stash apply." -ForegroundColor Yellow
+        }
+    }
+} else {
+    function gitlg {
+        Write-Host "Git is not installed or not in PATH." -ForegroundColor Yellow
+    }
+    function gcof {
+        Write-Host "Git is not installed or not in PATH." -ForegroundColor Yellow
+    }
+    function gstashf {
+        Write-Host "Git is not installed or not in PATH." -ForegroundColor Yellow
     }
 }
 
