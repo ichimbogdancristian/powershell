@@ -294,8 +294,9 @@ try {
         Write-Host ""
         Write-Host "Installed for:" -ForegroundColor Yellow
         foreach ($profileDir in $profileDirs) {
-            $status = if (Test-Path $profileDir.ProfileFile) { "✓" } else { "✗" }
-            Write-Host "  $status $($profileDir.Name)" -ForegroundColor $(if ($status -eq "✓") { "Green" } else { "Red" })
+            $status = if (Test-Path $profileDir.ProfileFile) { "[OK]" } else { "[FAIL]" }
+            $color = if (Test-Path $profileDir.ProfileFile) { "Green" } else { "Red" }
+            Write-Host "  $status $($profileDir.Name)" -ForegroundColor $color
         }
         Write-Host ""
         Write-Host "Next Steps:" -ForegroundColor Cyan
