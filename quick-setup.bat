@@ -132,7 +132,7 @@ echo ═════════════════════════
 REM Verify installation
 echo [VERIFY] Checking installation results...
 
-powershell -Command "$profilePaths = @('$env:USERPROFILE\OneDrive\Documente\PowerShell\Microsoft.PowerShell_profile.ps1', '$env:USERPROFILE\OneDrive\Documente\WindowsPowerShell\Microsoft.PowerShell_profile.ps1', '$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1', '$env:USERPROFILE\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1'); $found = $false; foreach ($path in $profilePaths) { if (Test-Path $path) { $found = $true; break } }; if ($found) { Write-Host '[OK] PowerShell profile found in target location' -ForegroundColor Green } else { Write-Host '[ERROR] PowerShell profile not found in any target location' -ForegroundColor Red; exit 1 }"
+powershell -ExecutionPolicy Bypass -File "%EXTRACT_DIR%\verify-installation.ps1"
 set "PROFILE_CHECK=%errorlevel%"
 
 powershell -Command "try { Get-Module posh-git,Terminal-Icons -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] Essential modules available' -ForegroundColor Green } catch { Write-Host '[OK] Essential modules available' -ForegroundColor Green }"

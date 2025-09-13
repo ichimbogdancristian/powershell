@@ -4,7 +4,9 @@ A streamlined PowerShell profile with Linux-like aliases, system monitoring, and
 
 ## Quick Start
 
-**🚀 Ultra-fast installation (downloads from GitHub):**
+> **� System Compatibility**: Before installing, see [COMPATIBILITY.md](./COMPATIBILITY.md) for detailed system requirements and cross-platform compatibility information.
+
+**�🚀 Ultra-fast installation (downloads from GitHub):**
 ```batch
 quick-setup.bat
 ```
@@ -13,6 +15,11 @@ quick-setup.bat
 ```powershell
 # Always overwrites existing profiles
 .\quick-install.ps1
+```
+
+**🧪 Test compatibility first:**
+```powershell
+.\test-compatibility.ps1
 ```
 
 ## ✨ Key Features

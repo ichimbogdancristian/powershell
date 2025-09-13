@@ -8,6 +8,12 @@
 # Module Imports
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Add local modules to path (for bundled modules)
+$localModulesPath = Join-Path (Split-Path $PROFILE -Parent) "Modules"
+if ((Test-Path $localModulesPath) -and ($env:PSModulePath -notlike "*$localModulesPath*")) {
+    $env:PSModulePath = "$localModulesPath;$env:PSModulePath"
+}
+
 # Import required modules with error handling
 try { Import-Module PSReadLine -Force -ErrorAction SilentlyContinue } catch { }
 try { Import-Module posh-git -Force -ErrorAction SilentlyContinue } catch { }
