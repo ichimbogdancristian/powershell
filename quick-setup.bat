@@ -62,7 +62,7 @@ echo ═════════════════════════
 echo [INSTALL] Running installation...
 
 cd /d "%TEMP_DIR%\powershell-main"
-powershell -ExecutionPolicy Bypass -File "quick-install.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "quick-install.ps1"
 set "INSTALL_RESULT=%errorlevel%"
 
 echo ═══════════════════════════════════════════════════════════════════════════════
