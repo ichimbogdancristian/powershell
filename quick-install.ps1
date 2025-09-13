@@ -1,3 +1,16 @@
+# Helper: Get-DocumentsPath (returns first available Documents folder)
+function Get-DocumentsPath {
+    $paths = @()
+    try { $paths += [Environment]::GetFolderPath("MyDocuments") } catch {}
+    try { if ($env:USERPROFILE) { $paths += Join-Path $env:USERPROFILE 'Documents' } } catch {}
+    try { if ($env:OneDrive) { $paths += Join-Path $env:OneDrive 'Documents' } } catch {}
+    foreach ($p in $paths | Where-Object { $_ -and (Test-Path $_) }) {
+        if ((Test-Path $p) -and (Test-Path $p -PathType Container)) {
+            return $p
+        }
+    }
+    return $null
+}
 # ═══════════════════════════════════════════════════════════════════════════════
 # PowerShell Enhanced Profile - Optimized Quick Install
 # Author: Bogdan Ichim
@@ -190,7 +203,11 @@ try {
     # Handle special modes
     if ($TestCompatibility) {
         $result = Test-SystemCompatibility
-        exit ($result ? 0 : 1)
+        if ($result) {
+            exit 0
+        } else {
+            exit 1
+        }
     }
     
     Write-Status "Starting PowerShell profile installation..." "STEP"
@@ -225,7 +242,11 @@ try {
     # Handle verification mode
     if ($VerifyInstallation) {
         $result = Test-Installation -ProfileDirs $profileDirs
-        exit ($result ? 0 : 1)
+        if ($result) {
+            exit 0
+        } else {
+            exit 1
+        }
     }
     
     # Verify installation
@@ -249,11 +270,14 @@ try {
         Write-Host ""
     }
     
-    exit ($verificationResult ? 0 : 1)
+    if ($verificationResult) {
+        exit 0
+    } else {
+        exit 1
+    }
     
 } catch {
     Write-Status "Installation failed: $($_.Exception.Message)" "ERROR"
-    
     if (-not $Silent) {
         Write-Host ""
         Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Red
