@@ -83,7 +83,7 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             'ERROR' { 'Red' }
             default { 'Gray' }
         }
-        Write-Host '[$Level] $Message' -ForegroundColor $color
+        Write-Host "[$Level] $Message" -ForegroundColor $color
     }
 
     function Get-DocumentsPath {
@@ -176,7 +176,7 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
                             else { 'System' }
                 
                 $dirs += [PSCustomObject]@{
-                    Name = \"$psVersion - $(Split-Path $profilePath -Leaf)\"
+                    Name = "$psVersion - $(Split-Path $profilePath -Leaf)"
                     Path = $dir
                     ProfileFile = $profilePath
                     PSVersion = $psVersion
@@ -184,7 +184,7 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             }
         }
         
-        Write-Status \"Found $($dirs.Count) PowerShell profile locations\" 'INFO'
+        Write-Status "Found $($dirs.Count) PowerShell profile locations" 'INFO'
         return $dirs
     }
 
@@ -197,26 +197,26 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         foreach ($module in $modules) {
             $existing = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
             if ($existing) {
-                Write-Status \"$module already installed (v$($existing[0].Version)) - skipping\" 'OK'
+                Write-Status "$module already installed (v$($existing[0].Version)) - skipping" 'OK'
                 $skipCount++
             } else {
-                Write-Status \"Installing $module...\" 'INFO'
+                Write-Status "Installing $module..." 'INFO'
                 try {
                     Install-Module $module -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
                     $installed = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
                     if ($installed) {
-                        Write-Status \"$module installed successfully (v$($installed[0].Version))\" 'OK'
+                        Write-Status "$module installed successfully (v$($installed[0].Version))" 'OK'
                         $successCount++
                     } else {
-                        Write-Status \"$module installation completed but module not found\" 'WARN'
+                        Write-Status "$module installation completed but module not found" 'WARN'
                     }
                 } catch {
-                    Write-Status \"Failed to install $module`: $($_.Exception.Message)\" 'ERROR'
+                    Write-Status "Failed to install $module`: $($_.Exception.Message)" 'ERROR'
                 }
             }
         }
         
-        Write-Status \"Module installation summary: $successCount installed, $skipCount skipped\" 'INFO'
+        Write-Status "Module installation summary: $successCount installed, $skipCount skipped" 'INFO'
         return ($successCount + $skipCount -gt 0)
     }
 
@@ -247,45 +247,45 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
                     switch ($tool.name) {
                         'oh-my-posh' { 
                             $versionOutput = & $tool.name --version 2>$null
-                            if ($versionOutput) { $version = \" (v$versionOutput)\" }
+                            if ($versionOutput) { $version = " (v$versionOutput)" }
                         }
                         'git' { 
                             $versionOutput = & $tool.name --version 2>$null
-                            if ($versionOutput) { $version = \" ($($versionOutput -split ' ')[2])\" }
+                            if ($versionOutput) { $version = " ($($versionOutput -split ' ')[2])" }
                         }
                         'zoxide' { 
                             $versionOutput = & $tool.name --version 2>$null
-                            if ($versionOutput) { $version = \" (v$versionOutput)\" }
+                            if ($versionOutput) { $version = " (v$versionOutput)" }
                         }
                     }
-                    Write-Status \"$($tool.name) already available$version - skipping\" 'OK'
+                    Write-Status "$($tool.name) already available$version - skipping" 'OK'
                 } catch {
-                    Write-Status \"$($tool.name) already available - skipping\" 'OK'
+                    Write-Status "$($tool.name) already available - skipping" 'OK'
                 }
                 $skipCount++
             } else {
-                Write-Status \"Installing $($tool.name)...\" 'INFO'
+                Write-Status "Installing $($tool.name)..." 'INFO'
                 try {
                     $process = Start-Process winget -ArgumentList 'install', $tool.id, '--silent', '--accept-source-agreements', '--accept-package-agreements' -Wait -PassThru -NoNewWindow -ErrorAction Stop
                     if ($process.ExitCode -eq 0 -or $process.ExitCode -eq -1978335189) {
                         # Verify installation
                         Start-Sleep -Seconds 2
                         if (Get-Command $tool.name -ErrorAction SilentlyContinue) {
-                            Write-Status \"$($tool.name) installed successfully\" 'OK'
+                            Write-Status "$($tool.name) installed successfully" 'OK'
                             $successCount++
                         } else {
-                            Write-Status \"$($tool.name) installation completed but command not found (may need PATH refresh)\" 'WARN'
+                            Write-Status "$($tool.name) installation completed but command not found (may need PATH refresh)" 'WARN'
                         }
                     } else {
-                        Write-Status \"$($tool.name) installation failed (exit code: $($process.ExitCode))\" 'ERROR'
+                        Write-Status "$($tool.name) installation failed (exit code: $($process.ExitCode))" 'ERROR'
                     }
                 } catch {
-                    Write-Status \"Failed to install $($tool.name): $($_.Exception.Message)\" 'ERROR'
+                    Write-Status "Failed to install $($tool.name): $($_.Exception.Message)" 'ERROR'
                 }
             }
         }
         
-        Write-Status \"Tool installation summary: $successCount installed, $skipCount skipped\" 'INFO'
+        Write-Status "Tool installation summary: $successCount installed, $skipCount skipped" 'INFO'
         return ($successCount + $skipCount -gt 0)
     }
 
@@ -300,7 +300,7 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         if (-not $docsPath) {
             $issues += 'No writable Documents folder found'
         } else {
-            Write-Status \"Documents folder: $docsPath\" 'INFO'
+            Write-Status "Documents folder: $docsPath" 'INFO'
         }
         
         # Check PowerShell versions
@@ -327,19 +327,19 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         $systemDrive = Get-CimInstance Win32_LogicalDisk | Where-Object DeviceID -eq $env:SystemDrive
         $freeSpaceMB = [math]::Round($systemDrive.FreeSpace / 1MB)
         if ($freeSpaceMB -lt 100) {
-            $issues += \"Insufficient disk space: ${freeSpaceMB}MB available\"
+            $issues += "Insufficient disk space: ${freeSpaceMB}MB available"
         }
         
         # Report results
         if ($warnings.Count -gt 0) {
-            Write-Status \"Warnings: $($warnings -join '; ')\" 'WARN'
+            Write-Status "Warnings: $($warnings -join '; ')" 'WARN'
         }
         
         if ($issues.Count -eq 0) {
             Write-Status 'System compatibility check passed' 'OK'
             return $true
         } else {
-            Write-Status \"Compatibility issues: $($issues -join '; ')\" 'ERROR'
+            Write-Status "Compatibility issues: $($issues -join '; ')" 'ERROR'
             return $false
         }
     }
@@ -347,9 +347,9 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
     function Backup-ExistingProfile {
         param($ProfilePath)
         if (Test-Path $ProfilePath) {
-            $backupPath = \"$ProfilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')\"
+            $backupPath = "$ProfilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
             Copy-Item $ProfilePath $backupPath -Force
-            Write-Status \"Backed up existing profile to $(Split-Path $backupPath -Leaf)\" 'INFO'
+            Write-Status "Backed up existing profile to $(Split-Path $backupPath -Leaf)" 'INFO'
             return $backupPath
         }
         return $null
@@ -359,11 +359,11 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         param($ProfileDirs)
         Write-Status 'Restoring profile backups due to installation failure...' 'WARN'
         foreach ($profileDir in $ProfileDirs) {
-            $backupFiles = Get-ChildItem \"$($profileDir.ProfileFile).backup.*\" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+            $backupFiles = Get-ChildItem "$($profileDir.ProfileFile).backup.*" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
             if ($backupFiles) {
                 $latestBackup = $backupFiles[0]
                 Copy-Item $latestBackup.FullName $profileDir.ProfileFile -Force
-                Write-Status \"Restored backup: $($latestBackup.Name)\" 'INFO'
+                Write-Status "Restored backup: $($latestBackup.Name)" 'INFO'
             }
         }
     }
@@ -374,25 +374,25 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         Write-Status 'Installing profile content...' 'STEP'
         
         # Dynamically find extracted repository directory (don't assume 'powershell-main')
-        $tempDir = '%TEMP_DIR%'
+        $tempDir = $env:TEMP + '\powershell-complete-install'
         $extractedDirs = Get-ChildItem $tempDir -Directory | Where-Object Name -like '*powershell*'
         
         if ($extractedDirs) {
             $scriptDir = $extractedDirs[0].FullName
-            Write-Status \"Found repository directory: $(Split-Path $scriptDir -Leaf)\" 'INFO'
+            Write-Status "Found repository directory: $(Split-Path $scriptDir -Leaf)" 'INFO'
         } else {
             # Fallback to expected name
             $scriptDir = Join-Path $tempDir 'powershell-main'
-            Write-Status \"Using fallback directory: powershell-main\" 'WARN'
+            Write-Status "Using fallback directory: powershell-main" 'WARN'
         }
         
         # Validate repository directory exists
         if (-not (Test-Path $scriptDir)) {
-            throw \"Repository directory not found: $scriptDir\"
+            throw "Repository directory not found: $scriptDir"
         }
         
         foreach ($profileDir in $ProfileDirs) {
-            Write-Status \"Configuring $($profileDir.Name)...\" 'INFO'
+            Write-Status "Configuring $($profileDir.Name)..." 'INFO'
             
             # Create directory if it doesn't exist
             if (-not (Test-Path $profileDir.Path)) {
@@ -407,12 +407,12 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             if (Test-Path $profileSrc) {
                 try {
                     Copy-Item $profileSrc $profileDir.ProfileFile -Force -ErrorAction Stop
-                    Write-Status \"Profile installed for $($profileDir.Name)\" 'OK'
+                    Write-Status "Profile installed for $($profileDir.Name)" 'OK'
                 } catch {
-                    Write-Status \"Failed to copy profile for $($profileDir.Name): $($_.Exception.Message)\" 'ERROR'
+                    Write-Status "Failed to copy profile for $($profileDir.Name): $($_.Exception.Message)" 'ERROR'
                 }
             } else {
-                Write-Status \"Profile source file not found: $profileSrc\" 'ERROR'
+                Write-Status "Profile source file not found: $profileSrc" 'ERROR'
                 throw 'Critical installation file missing - profile source not found'
             }
             
@@ -422,12 +422,12 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
                 try {
                     $themeDst = Join-Path $profileDir.Path 'oh-my-posh-default.json'
                     Copy-Item $themeSrc $themeDst -Force -ErrorAction Stop
-                    Write-Status \"Theme installed for $($profileDir.Name)\" 'OK'
+                    Write-Status "Theme installed for $($profileDir.Name)" 'OK'
                 } catch {
-                    Write-Status \"Failed to copy theme for $($profileDir.Name): $($_.Exception.Message)\" 'WARN'
+                    Write-Status "Failed to copy theme for $($profileDir.Name): $($_.Exception.Message)" 'WARN'
                 }
             } else {
-                Write-Status \"Theme source file not found: $themeSrc\" 'WARN'
+                Write-Status "Theme source file not found: $themeSrc" 'WARN'
             }
         }
     }
@@ -440,9 +440,9 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         $success = $true
         foreach ($profileDir in $ProfileDirs) {
             if (Test-Path $profileDir.ProfileFile) {
-                Write-Status \"$($profileDir.Name): Profile installed\" 'OK'
+                Write-Status "$($profileDir.Name): Profile installed" 'OK'
             } else {
-                Write-Status \"$($profileDir.Name): Profile missing\" 'ERROR'
+                Write-Status "$($profileDir.Name): Profile missing" 'ERROR'
                 $success = $false
             }
         }
@@ -503,9 +503,9 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         foreach ($module in $modules) {
             $installed = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
             if ($installed) {
-                Write-Host \"    [OK] $module (v$($installed[0].Version))\" -ForegroundColor Green
+                Write-Host "    [OK] $module (v$($installed[0].Version))" -ForegroundColor Green
             } else {
-                Write-Host \"    [MISSING] $module\" -ForegroundColor Red
+                Write-Host "    [MISSING] $module" -ForegroundColor Red
             }
             }
             
@@ -513,9 +513,9 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             foreach ($tool in $tools) {
                 $available = Get-Command $tool -ErrorAction SilentlyContinue
                 if ($available) {
-                    Write-Host \"    [OK] $tool available\" -ForegroundColor Green
+                    Write-Host "    [OK] $tool available" -ForegroundColor Green
                 } else {
-                    Write-Host \"    [MISSING] $tool\" -ForegroundColor Red
+                    Write-Host "    [MISSING] $tool" -ForegroundColor Red
                 }
             }
 
@@ -528,7 +528,7 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             foreach ($profileDir in $profileDirs) {
                 $status = if (Test-Path $profileDir.ProfileFile) { '[OK]' } else { '[FAIL]' }
                 $color = if (Test-Path $profileDir.ProfileFile) { 'Green' } else { 'Red' }
-                Write-Host \"  $status $($profileDir.Name)\" -ForegroundColor $color
+                Write-Host "  $status $($profileDir.Name)" -ForegroundColor $color
             }
             Write-Host ''
             Write-Host 'Next Steps:' -ForegroundColor Cyan
@@ -543,12 +543,12 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             }
         
     } catch {
-        Write-Status \"Installation failed: $($_.Exception.Message)\" 'ERROR'
+        Write-Status "Installation failed: $($_.Exception.Message)" 'ERROR'
         Write-Host ''
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Red
         Write-Host '                INSTALLATION FAILED' -ForegroundColor Red
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Red
-        Write-Host \"Error: $($_.Exception.Message)\" -ForegroundColor Red
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ''
         Write-Host 'Troubleshooting:' -ForegroundColor Yellow
         Write-Host '1. Run as Administrator' -ForegroundColor White
