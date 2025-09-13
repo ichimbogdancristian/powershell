@@ -261,44 +261,18 @@ if ($env:TERM_PROGRAM -eq "vscode") {
     $env:POSH_DISABLE_ANIMATIONS = $true
 }
 
-# Initialize Oh My Posh with default theme
-# Try multiple locations for the theme file, ensuring robust path detection
-$profileDir = Split-Path $PROFILE -Parent
-$themeLocations = @(
-    # First try in the same directory as the profile
-    (Join-Path $profileDir "oh-my-posh-default.json"),
-    # Try in PowerShell directory
-    (Join-Path $env:USERPROFILE "Documents\PowerShell\oh-my-posh-default.json"),
-    # Try in WindowsPowerShell directory  
-    (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\oh-my-posh-default.json"),
-    # Try using PSScriptRoot if it exists
-    $(if ($PSScriptRoot) { Join-Path $PSScriptRoot "oh-my-posh-default.json" }),
-    # Try current working directory as last resort
-    ".\oh-my-posh-default.json"
-)
 
-# Filter out null/empty paths
-$themeLocations = $themeLocations | Where-Object { $_ -and (Test-Path $_ -IsValid) }
-
-$ohMyPoshTheme = $null
-foreach ($location in $themeLocations) {
-    if (Test-Path $location) {
-        $ohMyPoshTheme = $location
-        Write-Verbose "Found Oh My Posh theme at: $ohMyPoshTheme"
-        break
-    }
-}
-
-# Check if Oh My Posh is installed
+# Force Oh My Posh to use the theme from the project folder
+$projectTheme = Join-Path "$PSScriptRoot" "oh-my-posh-default.json"
 if (-not (Get-Command oh-my-posh -ErrorAction SilentlyContinue)) {
     Write-Warning "Oh My Posh is not installed. Install it with: winget install JanDeDobbeleer.OhMyPosh"
     Write-Host "Or visit: https://ohmyposh.dev/docs/installation/windows" -ForegroundColor Yellow
-} elseif ($ohMyPoshTheme) {
+} elseif (Test-Path $projectTheme) {
     try {
-        oh-my-posh init pwsh --config $ohMyPoshTheme | Invoke-Expression
-        Write-Verbose "Oh My Posh initialized with custom theme: $ohMyPoshTheme"
+        oh-my-posh init pwsh --config $projectTheme | Invoke-Expression
+        Write-Verbose "Oh My Posh initialized with project theme: $projectTheme"
     } catch {
-        Write-Warning "Failed to load custom Oh My Posh theme: $($_.Exception.Message)"
+        Write-Warning "Failed to load project Oh My Posh theme: $($_.Exception.Message)"
         # Fallback to built-in theme
         try {
             if ($env:POSH_THEMES_PATH -and (Test-Path "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json")) {
@@ -310,13 +284,14 @@ if (-not (Get-Command oh-my-posh -ErrorAction SilentlyContinue)) {
         }
     }
 } else {
+    Write-Warning "Project theme not found at: $projectTheme"
     # Try to use a built-in theme if available
     try {
         if ($env:POSH_THEMES_PATH -and (Test-Path "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json")) {
             oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
-            Write-Host "Oh My Posh initialized with built-in theme (custom theme not found)" -ForegroundColor Yellow
+            Write-Host "Oh My Posh initialized with built-in theme (project theme not found)" -ForegroundColor Yellow
         } else {
-            Write-Warning "No Oh My Posh themes found. Theme file should be at: $profileDir\oh-my-posh-default.json"
+            Write-Warning "No Oh My Posh themes found. Theme file should be at: $projectTheme"
         }
     } catch {
         Write-Warning "Could not initialize Oh My Posh. Please check installation."
