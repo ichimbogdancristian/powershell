@@ -13,7 +13,7 @@ REM Check for Administrator Privileges
 openfiles >nul 2>nul
 if %errorlevel% neq 0 (
     echo [INFO] Administrator privileges required. Re-launching...
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    powershell.exe -NoProfile -NoLogo -NonInteractive -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
 
