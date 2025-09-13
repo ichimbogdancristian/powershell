@@ -11,10 +11,7 @@ quick-setup.bat
 
 **📦 Local installation (if you have the repository):**
 ```powershell
-# Fresh installation (recommended)
-.\quick-install.ps1 -CleanInstall
-
-# Preserve existing configurations
+# Always overwrites existing profiles
 .\quick-install.ps1
 ```
 
@@ -26,13 +23,12 @@ quick-setup.bat
 - **🎨 Oh My Posh themes**: Beautiful, customizable prompts with custom default theme
 - **📁 Enhanced file operations**: Smart ls with colors, file type icons, and detailed views
 - **⚡ Cross-platform**: Automatically installs for both PowerShell 5.1 and PowerShell Core 7+
-- **🔄 Smart installation**: Clean install option, automatic backups, and cross-version support
+- **🔄 Smart installation**: Always overwrites existing profiles for consistent setup
 
 ## 🎯 What Makes This Different
 
 - **Dual PowerShell Support**: Automatically detects and installs for both PS5 and PS7
-- **Clean Installation**: `-CleanInstall` option removes old configurations safely
-- **Smart Backups**: Preserves your existing customizations before updating
+- **Always Fresh**: Overwrites existing configurations for consistent experience
 - **Enhanced Compatibility**: Works in VS Code, Windows Terminal, and regular PowerShell
 - **Comprehensive**: Includes modules, themes, and tools in one package
 
@@ -48,29 +44,26 @@ quick-setup.bat
 ### Option 2: Local Installation
 If you've cloned the repository:
 ```powershell
-# Complete clean installation (removes all profile contents, no backups)
-.\quick-install.ps1 -CleanInstall
-
-# Regular installation (preserves existing files)
+# Always overwrites existing profiles (no backups)
 .\quick-install.ps1
 
 # Verbose output for troubleshooting
-.\quick-install.ps1 -CleanInstall -Verbose
+.\quick-install.ps1 -Verbose
 ```
 
 ## 🔍 Installation Details
 
 The installer will:
 1. **Detect** both PowerShell 5.1 and PowerShell Core 7+ installations
-2. **Completely clear** profile directories (if `-CleanInstall` used) - **NO BACKUPS**
+2. **Always overwrite** existing profile directories - **NO BACKUPS**
 3. **Install** essential modules: PSReadLine, posh-git, Terminal-Icons
 4. **Install** tools via winget: oh-my-posh, git, zoxide
 5. **Copy** fresh profiles to both PowerShell versions
 6. **Verify** installation success
 
 **Installation Locations:**
-- PowerShell Core: `Documents\PowerShell\` (completely cleared and repopulated)
-- Windows PowerShell: `Documents\WindowsPowerShell\` (completely cleared and repopulated)
+- PowerShell Core: `Documents\PowerShell\` (always overwritten)
+- Windows PowerShell: `Documents\WindowsPowerShell\` (always overwritten)
 
 ## Included Oh My Posh Theme
 

@@ -1,10 +1,10 @@
 ﻿# ═══════════════════════════════════════════════════════════════════════════════
 # PowerShell Enhanced Profile - Ultra Quick Install
 # Author: Bogdan Ichim
-# One-liner installer for PowerShell enhanced profile
+# Always overwrites existing profiles with enhanced PowerShell configuration
 # ═══════════════════════════════════════════════════════════════════════════════
 
-param([switch]$Silent, [switch]$Verbose, [switch]$CleanInstall)
+param([switch]$Silent, [switch]$Verbose)
 
 # Configure output preferences
 if ($Silent) { 
@@ -93,21 +93,37 @@ function Get-PowerShellProfileDirs {
     Log "  Profile Path: $($envVars.UserProfile)" "INFO"
     if ($envVars.OneDrive) { Log "  OneDrive: $($envVars.OneDrive)" "INFO" }
     
-    # Try multiple methods to get Documents folder (handle OneDrive redirection)
+    # Try multiple methods to get Documents folder (handle OneDrive redirection and localization)
+    # Priority: OneDrive folders first, then system folders
     $documentsPath = $null
     $documentsPaths = @(
-        [Environment]::GetFolderPath("MyDocuments"),
-        "$($envVars.UserProfile)\Documents",
         "$($envVars.OneDrive)\Documents",
+        "$($envVars.OneDrive)\Documente",  # Romanian localization
+        "$($envVars.OneDrive)\Dokumenty",  # Polish localization
+        "$($envVars.OneDrive)\Документы",  # Russian localization
         "$($envVars.OneDriveConsumer)\Documents",
-        "$($envVars.OneDriveCommercial)\Documents"
+        "$($envVars.OneDriveConsumer)\Documente",
+        "$($envVars.OneDriveCommercial)\Documents",
+        "$($envVars.OneDriveCommercial)\Documente",
+        [Environment]::GetFolderPath("MyDocuments"),
+        "$($envVars.UserProfile)\Documents"
     )
     
+    # Check which Documents folder is actually writable
     foreach ($path in $documentsPaths) {
         if ($path -and (Test-Path $path)) {
-            $documentsPath = $path
-            Log "Documents folder detected: $documentsPath" "OK"
-            break
+            # Test if we can create a directory in this path
+            try {
+                $testDir = "$path\ps-test-$(Get-Random)"
+                New-Item -Path $testDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                Remove-Item $testDir -Force -ErrorAction SilentlyContinue
+                $documentsPath = $path
+                Log "Writable Documents folder found: $documentsPath" "OK"
+                break
+            } catch {
+                Log "Documents folder not writable: $path" "WARN"
+                continue
+            }
         }
     }
     
@@ -181,14 +197,14 @@ function Get-PowerShellProfileDirs {
 function Clear-OldProfiles {
     param($ProfileDirs)
     
-    Log "Completely clearing PowerShell profile directories (no backups)..." "CLEAN"
+    Log "Overwriting existing PowerShell profiles (no backups)..." "CLEAN"
     
     foreach ($profileDir in $ProfileDirs) {
         $path = $profileDir.Path
         $name = $profileDir.Name
         
         if (Test-Path $path) {
-            Log "Completely clearing $name directory: $path" "CLEAN"
+            Log "Overwriting existing $name profile: $path" "CLEAN"
             
             try {
                 # Remove entire directory contents
@@ -250,18 +266,27 @@ try {
         Log "  - $($dir.Name): $($dir.Path)" "INFO"
     }
     
-    # Clean old installations if requested or if this is a fresh install
-    if ($CleanInstall -or -not (Test-Path $allProfileDirs[0].ProfileFile)) {
-        Clear-OldProfiles -ProfileDirs $allProfileDirs
-    }
+    # Always clean and overwrite existing profiles
+    Clear-OldProfiles -ProfileDirs $allProfileDirs
     
     # Set execution policy
     Log "Setting execution policy to RemoteSigned..." "STEP"
     try {
-        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        Log "Execution policy updated successfully" "OK"
+        $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
+        if ($currentPolicy -ne "RemoteSigned") {
+            Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction Stop
+            Log "Execution policy updated successfully" "OK"
+        } else {
+            Log "Execution policy already set correctly" "OK"
+        }
     } catch {
-        Log "Warning: Could not set execution policy - $($_.Exception.Message)" "WARN"
+        # Check if it's just a path issue but policy is actually set correctly
+        $actualPolicy = try { Get-ExecutionPolicy -Scope CurrentUser } catch { "Unknown" }
+        if ($actualPolicy -eq "RemoteSigned") {
+            Log "Execution policy is already set correctly" "OK"
+        } else {
+            Log "Warning: Could not verify/set execution policy - continuing anyway" "WARN"
+        }
     }
 
     # Install essential modules
@@ -272,10 +297,25 @@ try {
         if (-not (Get-Module $module -ListAvailable -ErrorAction SilentlyContinue)) {
             Log "Installing $module..." "INFO"
             try {
-                Install-Module $module -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop -Confirm:$false
-                Log "$module installed successfully" "OK"
+                # Use a job with timeout to prevent hanging
+                $job = Start-Job -ScriptBlock {
+                    param($ModuleName)
+                    Install-Module $ModuleName -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop -Confirm:$false
+                } -ArgumentList $module
+                
+                # Wait for job with 60 second timeout
+                $result = Wait-Job $job -Timeout 60
+                if ($result) {
+                    Receive-Job $job -ErrorAction SilentlyContinue
+                    Log "$module installed successfully" "OK"
+                } else {
+                    Stop-Job $job -ErrorAction SilentlyContinue
+                    throw "Installation timeout after 60 seconds"
+                }
+                Remove-Job $job -Force -ErrorAction SilentlyContinue
             } catch {
                 Log "Failed to install $module - $($_.Exception.Message)" "ERROR"
+                Log "Continuing with installation..." "WARN"
             }
         } else {
             Log "$module already available" "OK"
@@ -295,12 +335,29 @@ try {
             if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
                 Log "Installing $($tool.name)..." "INFO"
                 try {
-                    $process = Start-Process winget -ArgumentList "install", $tool.id, "--silent", "--accept-source-agreements", "--accept-package-agreements" -Wait -PassThru -NoNewWindow
-                    if ($process.ExitCode -eq 0) {
-                        Log "$($tool.name) installed successfully" "OK"
+                    # Use timeout for winget installations
+                    $job = Start-Job -ScriptBlock {
+                        param($ToolId)
+                        $process = Start-Process winget -ArgumentList "install", $ToolId, "--silent", "--accept-source-agreements", "--accept-package-agreements" -Wait -PassThru -NoNewWindow
+                        return $process.ExitCode
+                    } -ArgumentList $tool.id
+                    
+                    $result = Wait-Job $job -Timeout 120  # 2 minute timeout for winget
+                    if ($result) {
+                        $exitCode = Receive-Job $job
+                        if ($exitCode -eq 0) {
+                            Log "$($tool.name) installed successfully" "OK"
+                        } elseif ($exitCode -eq -1978335189) {
+                            # Common winget exit code for "already installed" or "no upgrade needed"
+                            Log "$($tool.name) is already up to date" "OK"
+                        } else {
+                            Log "$($tool.name) installation completed with exit code: $exitCode" "WARN"
+                        }
                     } else {
-                        Log "$($tool.name) installation may have issues (exit code: $($process.ExitCode))" "WARN"
+                        Stop-Job $job -ErrorAction SilentlyContinue
+                        Log "$($tool.name) installation timeout after 2 minutes" "WARN"
                     }
+                    Remove-Job $job -Force -ErrorAction SilentlyContinue
                 } catch {
                     Log "Failed to install $($tool.name) - $($_.Exception.Message)" "ERROR"
                 }
@@ -328,6 +385,7 @@ try {
         
         # Create profile directory with robust path handling
         try {
+            Log "Target path for ${targetName}: $targetPath" "INFO"
             if (-not (Test-Path $targetPath)) { 
                 Log "Creating profile directory for $targetName..." "INFO"
                 
@@ -339,13 +397,28 @@ try {
                 }
                 
                 # Create the target directory
-                New-Item -ItemType Directory -Path $targetPath -Force -ErrorAction Stop | Out-Null
+                $dirResult = New-Item -ItemType Directory -Path $targetPath -Force -ErrorAction Stop
                 
-                # Verify directory was created
-                if (Test-Path $targetPath) {
+                # Small delay to ensure filesystem sync
+                Start-Sleep -Milliseconds 100
+                
+                # Verify directory was created with multiple checks
+                $verificationAttempts = 0
+                $maxAttempts = 3
+                $dirExists = $false
+                
+                do {
+                    $verificationAttempts++
+                    $dirExists = (Test-Path $targetPath -PathType Container)
+                    if (-not $dirExists) {
+                        Start-Sleep -Milliseconds 200
+                    }
+                } while (-not $dirExists -and $verificationAttempts -lt $maxAttempts)
+                
+                if ($dirExists) {
                     Log "Profile directory created successfully: $targetPath" "OK"
                 } else {
-                    throw "Directory creation verification failed"
+                    throw "Directory creation verification failed after $maxAttempts attempts. Path: $targetPath"
                 }
             } else {
                 Log "Profile directory already exists: $targetPath" "OK"
