@@ -125,19 +125,33 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
     function Install-RequiredModules {
         Write-Status 'Installing required modules...' 'STEP'
         $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons', 'oh-my-posh')
+        $successCount = 0
+        $skipCount = 0
+        
         foreach ($module in $modules) {
-            if (-not (Get-Module -ListAvailable -Name $module)) {
+            $existing = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
+            if ($existing) {
+                Write-Status \"$module already installed (v$($existing[0].Version)) - skipping\" 'OK'
+                $skipCount++
+            } else {
                 Write-Status \"Installing $module...\" 'INFO'
                 try {
                     Install-Module $module -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-                    Write-Status \"$module installed successfully\" 'OK'
+                    $installed = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
+                    if ($installed) {
+                        Write-Status \"$module installed successfully (v$($installed[0].Version))\" 'OK'
+                        $successCount++
+                    } else {
+                        Write-Status \"$module installation completed but module not found\" 'WARN'
+                    }
                 } catch {
-                    Write-Status \"Failed to install $module\" 'WARN'
+                    Write-Status \"Failed to install $module`: $($_.Exception.Message)\" 'ERROR'
                 }
-            } else {
-                Write-Status \"$module already available\" 'OK'
             }
         }
+        
+        Write-Status \"Module installation summary: $successCount installed, $skipCount skipped\" 'INFO'
+        return ($successCount + $skipCount -gt 0)
     }
 
     function Install-RequiredTools {
@@ -156,27 +170,57 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         )
         
         $successCount = 0
+        $skipCount = 0
+        
         foreach ($tool in $tools) {
-            if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
+            $existing = Get-Command $tool.name -ErrorAction SilentlyContinue
+            if ($existing) {
+                try {
+                    # Try to get version info
+                    $version = ''
+                    switch ($tool.name) {
+                        'oh-my-posh' { 
+                            $versionOutput = & $tool.name --version 2>$null
+                            if ($versionOutput) { $version = \" (v$versionOutput)\" }
+                        }
+                        'git' { 
+                            $versionOutput = & $tool.name --version 2>$null
+                            if ($versionOutput) { $version = \" ($($versionOutput -split ' ')[2])\" }
+                        }
+                        'zoxide' { 
+                            $versionOutput = & $tool.name --version 2>$null
+                            if ($versionOutput) { $version = \" (v$versionOutput)\" }
+                        }
+                    }
+                    Write-Status \"$($tool.name) already available$version - skipping\" 'OK'
+                } catch {
+                    Write-Status \"$($tool.name) already available - skipping\" 'OK'
+                }
+                $skipCount++
+            } else {
                 Write-Status \"Installing $($tool.name)...\" 'INFO'
                 try {
                     $process = Start-Process winget -ArgumentList 'install', $tool.id, '--silent', '--accept-source-agreements', '--accept-package-agreements' -Wait -PassThru -NoNewWindow -ErrorAction Stop
                     if ($process.ExitCode -eq 0 -or $process.ExitCode -eq -1978335189) {
-                        Write-Status \"$($tool.name) installed successfully\" 'OK'
-                        $successCount++
+                        # Verify installation
+                        Start-Sleep -Seconds 2
+                        if (Get-Command $tool.name -ErrorAction SilentlyContinue) {
+                            Write-Status \"$($tool.name) installed successfully\" 'OK'
+                            $successCount++
+                        } else {
+                            Write-Status \"$($tool.name) installation completed but command not found (may need PATH refresh)\" 'WARN'
+                        }
                     } else {
-                        Write-Status \"$($tool.name) installation failed (exit code: $($process.ExitCode))\" 'WARN'
+                        Write-Status \"$($tool.name) installation failed (exit code: $($process.ExitCode))\" 'ERROR'
                     }
                 } catch {
-                    Write-Status \"Failed to install $($tool.name): $($_.Exception.Message)\" 'WARN'
+                    Write-Status \"Failed to install $($tool.name): $($_.Exception.Message)\" 'ERROR'
                 }
-            } else {
-                Write-Status \"$($tool.name) already available\" 'OK'
-                $successCount++
             }
         }
         
-        return ($successCount -gt 0)
+        Write-Status \"Tool installation summary: $successCount installed, $skipCount skipped\" 'INFO'
+        return ($successCount + $skipCount -gt 0)
     }
 
     function Test-SystemCompatibility {
@@ -355,7 +399,32 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             if (-not $verificationResult) {
                 Restore-ProfileBackups -ProfileDirs $profileDirs
                 throw 'Profile installation verification failed'
-            }        Write-Host ''
+            }        # Final dependency verification
+        Write-Status 'Verifying final installation status...' 'STEP'
+        $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons', 'oh-my-posh')
+        $tools = @('oh-my-posh', 'git', 'zoxide')
+        
+        Write-Host '  PowerShell Modules:' -ForegroundColor Yellow
+        foreach ($module in $modules) {
+            $installed = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
+            if ($installed) {
+                Write-Host \"    [OK] $module (v$($installed[0].Version))\" -ForegroundColor Green
+            } else {
+                Write-Host \"    [MISSING] $module\" -ForegroundColor Red
+            }
+        }
+        
+        Write-Host '  External Tools:' -ForegroundColor Yellow
+        foreach ($tool in $tools) {
+            $available = Get-Command $tool -ErrorAction SilentlyContinue
+            if ($available) {
+                Write-Host \"    [OK] $tool available\" -ForegroundColor Green
+            } else {
+                Write-Host \"    [MISSING] $tool\" -ForegroundColor Red
+            }
+        }
+
+        Write-Host ''
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
         Write-Host '                INSTALLATION COMPLETE' -ForegroundColor Cyan
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
