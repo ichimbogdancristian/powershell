@@ -321,7 +321,7 @@ try {
         Write-Host "1. Close this PowerShell window" -ForegroundColor White
         Write-Host "2. Open a new PowerShell (or PowerShell Core) window" -ForegroundColor White
         Write-Host "3. Try these commands:" -ForegroundColor White
-        Write-Host "   • neofetch    - System information" -ForegroundColor Gray
+
         Write-Host "   • ll          - Enhanced directory listing" -ForegroundColor Gray
         Write-Host "   • health      - System health check" -ForegroundColor Gray
         Write-Host "   • help-profile - Show all available commands" -ForegroundColor Gray

@@ -109,6 +109,149 @@ Set-PSReadLineKeyHandler -Key Ctrl+z -Function Undo
 Set-PSReadLineKeyHandler -Key Ctrl+y -Function Redo
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Enhanced Tab Completion & Auto-Suggestions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Enhanced Tab Completion Settings
+Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+Set-PSReadLineKeyHandler -Key Ctrl+Spacebar -Function MenuComplete
+
+# Custom Argument Completers
+Register-ArgumentCompleter -CommandName 'git' -Native -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    
+    $gitCommands = @('add', 'branch', 'checkout', 'clone', 'commit', 'diff', 'fetch', 'init', 'log', 'merge', 'pull', 'push', 'rebase', 'reset', 'status', 'tag', 'remote', 'show', 'stash', 'mv', 'rm', 'config')
+    $gitCommands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
+
+# Docker completion
+Register-ArgumentCompleter -CommandName 'docker' -Native -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    
+    $dockerCommands = @('build', 'run', 'pull', 'push', 'ps', 'images', 'start', 'stop', 'restart', 'rm', 'rmi', 'exec', 'logs', 'inspect', 'network', 'volume', 'compose')
+    $dockerCommands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
+
+# NPM/Node completion
+Register-ArgumentCompleter -CommandName 'npm' -Native -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    
+    $npmCommands = @('install', 'uninstall', 'update', 'start', 'test', 'run', 'build', 'init', 'publish', 'info', 'search', 'list', 'audit', 'fund')
+    $npmCommands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
+
+# Custom function parameter completion for profile functions
+Register-ArgumentCompleter -CommandName 'z' -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    
+    # Get recently used directories
+    $recentDirs = @()
+    if (Test-Path "$env:USERPROFILE\.zoxide\db.json") {
+        try {
+            $zoxideData = Get-Content "$env:USERPROFILE\.zoxide\db.json" | ConvertFrom-Json
+            $recentDirs = $zoxideData.paths | Select-Object -First 20
+        } catch { }
+    }
+    
+    # Also include subdirectories of current location
+    $currentDirs = Get-ChildItem -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    
+    ($recentDirs + $currentDirs) | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
+
+# Enhanced path completion with smart suggestions
+Register-ArgumentCompleter -CommandName @('cd', 'Set-Location', 'sl') -ParameterName 'Path' -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    
+    # Get directories that match the partial input
+    $directories = @()
+    
+    if ($wordToComplete) {
+        # Try to resolve relative paths
+        $basePath = if ($wordToComplete -match '^[a-zA-Z]:' -or $wordToComplete.StartsWith('\\')) {
+            Split-Path $wordToComplete -Parent
+        } else {
+            Get-Location
+        }
+        
+        try {
+            $pattern = Split-Path $wordToComplete -Leaf
+            $searchPath = if ($basePath) { $basePath } else { Get-Location }
+            
+            $directories = Get-ChildItem -Path $searchPath -Directory -ErrorAction SilentlyContinue | 
+                Where-Object { $_.Name -like "$pattern*" } |
+                ForEach-Object { 
+                    $fullPath = $_.FullName
+                    $displayName = if ($wordToComplete -match '^[a-zA-Z]:' -or $wordToComplete.StartsWith('\\')) {
+                        $fullPath
+                    } else {
+                        $_.Name
+                    }
+                    [System.Management.Automation.CompletionResult]::new($displayName, $displayName, 'ParameterValue', $fullPath)
+                }
+        } catch { }
+    } else {
+        # Show current directory contents
+        try {
+            $directories = Get-ChildItem -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                [System.Management.Automation.CompletionResult]::new($_.Name, $_.Name, 'ParameterValue', $_.FullName)
+            }
+        } catch { }
+    }
+    
+    return $directories
+}
+
+# File extension based completion
+Register-ArgumentCompleter -CommandName @('code', 'notepad', 'Get-Content', 'gc', 'cat') -ParameterName 'Path' -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    
+    $fileExtensions = @('.ps1', '.txt', '.json', '.xml', '.csv', '.md', '.yml', '.yaml', '.config', '.log')
+    
+    try {
+        Get-ChildItem -File -ErrorAction SilentlyContinue |
+            Where-Object { 
+                $_.Name -like "$wordToComplete*" -and 
+                ($fileExtensions -contains $_.Extension -or $_.Extension -eq '')
+            } |
+            ForEach-Object {
+                [System.Management.Automation.CompletionResult]::new($_.Name, $_.Name, 'ParameterValue', $_.FullName)
+            }
+    } catch { }
+}
+
+# Enhanced history-based intelligent suggestions
+if (Get-Module PSReadLine) {
+    try {
+        # Enable predictive IntelliSense if available (PSReadLine 2.2.2+)
+        if ((Get-Module PSReadLine).Version -ge [version]"2.2.2") {
+            Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView
+        }
+        
+        # Smart completion based on command context
+        Set-PSReadLineOption -CompletionQueryItems 50
+        Set-PSReadLineOption -MaximumHistoryCount 10000
+        
+        # Enable F1 for command help
+        Set-PSReadLineKeyHandler -Key F1 -Function WhatIsKey
+        
+        # Ctrl+R for reverse history search
+        Set-PSReadLineKeyHandler -Key Ctrl+r -Function ReverseSearchHistory
+        
+    } catch {
+        Write-Verbose "Advanced PSReadLine features not available in this version"
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Oh My Posh Configuration
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -245,7 +388,7 @@ function gb { git branch $args }
 function gco { git checkout $args }
 
 # System Information
-Set-Alias -Name neofetch -Value Get-SystemInfo
+
 Set-Alias -Name df -Value Get-DiskUsage
 Set-Alias -Name free -Value Get-MemoryUsage
 Set-Alias -Name uptime -Value Get-Uptime
@@ -545,20 +688,20 @@ if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
 }
 
 if (Get-Command Get-Clipboard -ErrorAction SilentlyContinue) {
-    function Paste-FromClipboard {
+    function Get-FromClipboard {
         $clip = Get-Clipboard
         Write-Host $clip
         return $clip
     }
 } else {
-    function Paste-FromClipboard {
+    function Get-FromClipboard {
         Write-Host "Get-Clipboard is not available. Please update PowerShell or install the required module." -ForegroundColor Yellow
         return $null
     }
 }
 
 New-Alias -Name copyclip -Value Copy-ToClipboard -Force
-New-Alias -Name pasteclip -Value Paste-FromClipboard -Force
+New-Alias -Name pasteclip -Value Get-FromClipboard -Force
 
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -678,7 +821,7 @@ function Show-WelcomeMessage {
         Write-Host "│ Health: CPU $($health.CPU.Value)% | Memory $($health.Memory.Value)% | Disk $($health.Disk.Value)%" -ForegroundColor Cyan
         Write-Host "└─────────────────────────────────────────────┘" -ForegroundColor Blue
         Write-Host ""
-        Write-Host "Commands: ll, neofetch, health, c (code), settings | help-profile for more" -ForegroundColor DarkGray
+    Write-Host "Commands: ll, health, c (code), settings | help-profile for more" -ForegroundColor DarkGray
         Write-Host ""
     } else {
         # Show full welcome message for regular PowerShell
@@ -698,7 +841,7 @@ function Show-WelcomeMessage {
         Write-Host "$($health.Disk.Value)%" -ForegroundColor $health.Disk.Color
         Write-Host "╰─────────────────────────────────────────────────────────╯" -ForegroundColor Magenta
         Write-Host ""
-        Write-Host "Available commands: ll, la, neofetch, df, free, uptime, health, reload-profile" -ForegroundColor DarkGray
+    Write-Host "Available commands: ll, la, df, free, uptime, health, reload-profile" -ForegroundColor DarkGray
         Write-Host "Use 'z `<directory`>' for smart navigation | Git shortcuts: g, gs, ga, gc, gp, gst" -ForegroundColor DarkGray
         Write-Host "Enhanced: copyf, cdd, size, extract, serve, weather, ff, search, bookmarks" -ForegroundColor DarkGray
         Write-Host 'Bookmarks: bookmark <name>, go <name>, bookmarks, unbookmark <name>' -ForegroundColor DarkGray
@@ -767,7 +910,7 @@ function prompt {
 # Profile Load Complete
 # ═══════════════════════════════════════════════════════════════════════════════
 
-Write-Host "Profile loaded successfully! Type 'neofetch' to see system info." -ForegroundColor Green
+Write-Host "Profile loaded successfully!" -ForegroundColor Green
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Additional Useful Functions
@@ -1024,7 +1167,7 @@ function Get-ProfileHelp {
     Write-Host "│  search          - Enhanced grep with highlighting" -ForegroundColor White
     Write-Host "│" -ForegroundColor Blue
     Write-Host "│ System Info:" -ForegroundColor Yellow
-    Write-Host "│  neofetch        - System information" -ForegroundColor White
+
     Write-Host "│  health          - System health check" -ForegroundColor White
     Write-Host "│  df              - Disk usage" -ForegroundColor White
     Write-Host "│  free            - Memory usage" -ForegroundColor White
