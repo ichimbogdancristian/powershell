@@ -196,5 +196,3 @@ Set-Alias -Name help-profile -Value Get-ProfileHelp -Force
 # Welcome Message
 # ═══════════════════════════════════════════════════════════════════════════════
 
-Write-Host "PowerShell Enhanced Profile Loaded" -ForegroundColor Green
-Write-Host "Run 'help-profile' for available commands" -ForegroundColor DarkGray
