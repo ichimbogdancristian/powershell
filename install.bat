@@ -496,10 +496,10 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             
             # Final dependency verification
             Write-Status 'Verifying final installation status...' 'STEP'
-        $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons', 'oh-my-posh')
-        $tools = @('oh-my-posh', 'git', 'zoxide')
-        
-        Write-Host '  PowerShell Modules:' -ForegroundColor Yellow
+            $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons', 'oh-my-posh')
+            $tools = @('oh-my-posh', 'git', 'zoxide')
+            
+            Write-Host '  PowerShell Modules:' -ForegroundColor Yellow
         foreach ($module in $modules) {
             $installed = Get-Module -ListAvailable -Name $module -ErrorAction SilentlyContinue
             if ($installed) {
@@ -507,40 +507,40 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             } else {
                 Write-Host \"    [MISSING] $module\" -ForegroundColor Red
             }
-        }
-        
-        Write-Host '  External Tools:' -ForegroundColor Yellow
-        foreach ($tool in $tools) {
-            $available = Get-Command $tool -ErrorAction SilentlyContinue
-            if ($available) {
-                Write-Host \"    [OK] $tool available\" -ForegroundColor Green
-            } else {
-                Write-Host \"    [MISSING] $tool\" -ForegroundColor Red
             }
-        }
+            
+            Write-Host '  External Tools:' -ForegroundColor Yellow
+            foreach ($tool in $tools) {
+                $available = Get-Command $tool -ErrorAction SilentlyContinue
+                if ($available) {
+                    Write-Host \"    [OK] $tool available\" -ForegroundColor Green
+                } else {
+                    Write-Host \"    [MISSING] $tool\" -ForegroundColor Red
+                }
+            }
 
-        Write-Host ''
-        Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
-        Write-Host '                INSTALLATION COMPLETE' -ForegroundColor Cyan
-        Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
-        Write-Host ''
-        Write-Host 'Installed for:' -ForegroundColor Yellow
-        foreach ($profileDir in $profileDirs) {
-            $status = if (Test-Path $profileDir.ProfileFile) { '[OK]' } else { '[FAIL]' }
-            $color = if (Test-Path $profileDir.ProfileFile) { 'Green' } else { 'Red' }
-            Write-Host \"  $status $($profileDir.Name)\" -ForegroundColor $color
-        }
-        Write-Host ''
-        Write-Host 'Next Steps:' -ForegroundColor Cyan
-        Write-Host '1. Restart PowerShell' -ForegroundColor White
-        Write-Host '2. Try: ll, health, help-profile' -ForegroundColor White
-        Write-Host ''
-        
-        if ($verificationResult) {
-            exit 0
-        } else {
-            exit 1
-        }
+            Write-Host ''
+            Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
+            Write-Host '                INSTALLATION COMPLETE' -ForegroundColor Cyan
+            Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
+            Write-Host ''
+            Write-Host 'Installed for:' -ForegroundColor Yellow
+            foreach ($profileDir in $profileDirs) {
+                $status = if (Test-Path $profileDir.ProfileFile) { '[OK]' } else { '[FAIL]' }
+                $color = if (Test-Path $profileDir.ProfileFile) { 'Green' } else { 'Red' }
+                Write-Host \"  $status $($profileDir.Name)\" -ForegroundColor $color
+            }
+            Write-Host ''
+            Write-Host 'Next Steps:' -ForegroundColor Cyan
+            Write-Host '1. Restart PowerShell' -ForegroundColor White
+            Write-Host '2. Try: ll, health, help-profile' -ForegroundColor White
+            Write-Host ''
+            
+            if ($verificationResult) {
+                exit 0
+            } else {
+                exit 1
+            }
         
     } catch {
         Write-Status \"Installation failed: $($_.Exception.Message)\" 'ERROR'
