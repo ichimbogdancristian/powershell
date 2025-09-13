@@ -3,6 +3,16 @@ setlocal enabledelayedexpansion
 title PowerShell Profile Quick Setup
 color 0A
 
+REM ═══════════════════════════════════════════════════════════════════════════════
+REM Check for Administrator Privileges
+REM ═══════════════════════════════════════════════════════════════════════════════
+openfiles >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [INFO] Administrator privileges required. Re-launching...
+    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
+)
+
 echo.
 echo ═══════════════════════════════════════════════════════════════════════════════
 echo                PowerShell Enhanced Profile - Quick Setup
