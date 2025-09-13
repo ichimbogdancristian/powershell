@@ -123,7 +123,10 @@ function Get-SystemHealth {
 # Network utilities
 function Get-PublicIP {
     try {
+        $oldProgress = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
         $ip = Invoke-RestMethod -Uri "https://api.ipify.org" -TimeoutSec 5
+        $ProgressPreference = $oldProgress
         Write-Host "Public IP: $ip" -ForegroundColor Green
     } catch {
         Write-Host "Could not retrieve public IP" -ForegroundColor Red

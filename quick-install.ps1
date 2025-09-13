@@ -13,6 +13,7 @@ param(
 # Configure output preferences
 $ErrorActionPreference = if ($Silent) { "SilentlyContinue" } else { "Continue" }
 $WarningPreference = if ($Silent) { "SilentlyContinue" } else { "Continue" }
+$ProgressPreference = 'SilentlyContinue'  # Suppress all progress bars
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Core Functions
@@ -97,7 +98,7 @@ function Install-RequiredModules {
         if (-not (Get-Module $module -ListAvailable -ErrorAction SilentlyContinue)) {
             Write-Status "Installing $module..." "INFO"
             try {
-                Install-Module $module -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop
+                Install-Module $module -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop | Out-Null
                 Write-Status "$module installed successfully" "OK"
             } catch {
                 Write-Status "Failed to install $module" "WARN"
@@ -181,7 +182,7 @@ function Install-ProfileContent {
         # Copy profile file
         $profileSrc = Join-Path $scriptDir "Microsoft.PowerShell_profile.ps1"
         if (Test-Path $profileSrc) {
-            Copy-Item $profileSrc $profileDir.ProfileFile -Force
+            Copy-Item $profileSrc $profileDir.ProfileFile -Force | Out-Null
             Write-Status "Profile copied for $($profileDir.Name)" "OK"
         } else {
             Write-Status "Profile source file not found" "ERROR"
@@ -191,7 +192,7 @@ function Install-ProfileContent {
         $themeSrc = Join-Path $scriptDir "oh-my-posh-default.json"
         if (Test-Path $themeSrc) {
             $themeDst = Join-Path $profileDir.Path "oh-my-posh-default.json"
-            Copy-Item $themeSrc $themeDst -Force
+            Copy-Item $themeSrc $themeDst -Force | Out-Null
             Write-Status "Theme copied for $($profileDir.Name)" "OK"
         }
     }
