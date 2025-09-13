@@ -19,86 +19,52 @@ $ProgressPreference = 'SilentlyContinue'  # Suppress all progress bars
 # Core Functions
 # ═══════════════════════════════════════════════════════════════════════════════
 
-function Write-Status($msg, $type = "INFO") {
-    if ($Silent) { return }
-    
-    $color = switch($type) {
-        "OK" { "Green" }
-        "WARN" { "Yellow" } 
-        "ERROR" { "Red" }
-        "STEP" { "Cyan" }
-        default { "White" }
-    }
-    Write-Host "[$type] $msg" -ForegroundColor $color
-}
-
-function Get-DocumentsPath {
-    # Simplified Documents folder detection with environment variable priority
-    $documentsPaths = @(
-        [Environment]::GetFolderPath("MyDocuments"),
-        "$env:USERPROFILE\Documents",
-        "$env:OneDrive\Documents"
+function Write-Status {
+    param(
+        [string]$Message,
+        [string]$Level = "INFO"
     )
-    
-    foreach ($path in $documentsPaths) {
-        if ($path -and (Test-Path $path)) {
-            try {
-                # Quick write test
-                $testFile = Join-Path $path "ps-test-$(Get-Random)"
-                "test" | Out-File -FilePath $testFile -Force
-                Remove-Item $testFile -Force -ErrorAction SilentlyContinue
-                return $path
-            } catch {
-                continue
-            }
-        }
+    $color = switch ($Level) {
+        "OK"    { "Green" }
+        "STEP"  { "Cyan" }
+        "INFO"  { "White" }
+        "WARN"  { "Yellow" }
+        "ERROR" { "Red" }
+        default { "Gray" }
     }
-    
-    # Fallback
-    return "$env:USERPROFILE\Documents"
+    Write-Host "[$Level] $Message" -ForegroundColor $color
 }
 
 function Get-ProfileDirectories {
-    $documentsPath = Get-DocumentsPath
-    $profileDirs = @()
-    
-    # PowerShell Core (7+)
-    if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-        $coreDir = Join-Path $documentsPath "PowerShell"
-        $profileDirs += @{
-            Path = $coreDir
-            Name = "PowerShell Core"
-            ProfileFile = Join-Path $coreDir "Microsoft.PowerShell_profile.ps1"
+    $dirs = @()
+    $pwshPaths = @(
+        $PROFILE.AllUsersCurrentHost,
+        $PROFILE.AllUsersAllHosts,
+        $PROFILE.CurrentUserCurrentHost,
+        $PROFILE.CurrentUserAllHosts
+    ) | Select-Object -Unique
+
+    foreach ($profilePath in $pwshPaths) {
+        if ($profilePath) {
+            $dir = Split-Path $profilePath -Parent
+            $dirs += [PSCustomObject]@{
+                Name = $profilePath
+                Path = $dir
+                ProfileFile = $profilePath
+            }
         }
     }
-    
-    # Windows PowerShell (5.1)
-    if (Get-Command powershell -ErrorAction SilentlyContinue) {
-        $winDir = Join-Path $documentsPath "WindowsPowerShell"
-        $profileDirs += @{
-            Path = $winDir
-            Name = "Windows PowerShell"
-            ProfileFile = Join-Path $winDir "Microsoft.PowerShell_profile.ps1"
-        }
-    }
-    
-    if ($profileDirs.Count -eq 0) {
-        throw "No PowerShell installations detected"
-    }
-    
-    return $profileDirs
+    return $dirs
 }
 
 function Install-RequiredModules {
-    Write-Status "Installing required PowerShell modules..." "STEP"
-    
-    $modules = @("PSReadLine", "posh-git", "Terminal-Icons")
-    
+    Write-Status "Installing required modules..." "STEP"
+    $modules = @("PSReadLine", "posh-git", "oh-my-posh")
     foreach ($module in $modules) {
-        if (-not (Get-Module $module -ListAvailable -ErrorAction SilentlyContinue)) {
+        if (-not (Get-Module -ListAvailable -Name $module)) {
             Write-Status "Installing $module..." "INFO"
             try {
-                Install-Module $module -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop | Out-Null
+                Install-Module $module -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
                 Write-Status "$module installed successfully" "OK"
             } catch {
                 Write-Status "Failed to install $module" "WARN"
