@@ -492,8 +492,10 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             if (-not $verificationResult) {
                 Restore-ProfileBackups -ProfileDirs $profileDirs
                 throw 'Profile installation verification failed'
-            }        # Final dependency verification
-        Write-Status 'Verifying final installation status...' 'STEP'
+            }
+            
+            # Final dependency verification
+            Write-Status 'Verifying final installation status...' 'STEP'
         $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons', 'oh-my-posh')
         $tools = @('oh-my-posh', 'git', 'zoxide')
         
