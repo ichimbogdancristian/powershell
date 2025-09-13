@@ -4,11 +4,13 @@ function Get-DocumentsPath {
     try { $paths += [Environment]::GetFolderPath("MyDocuments") } catch {}
     try { if ($env:USERPROFILE) { $paths += Join-Path $env:USERPROFILE 'Documents' } } catch {}
     try { if ($env:OneDrive) { $paths += Join-Path $env:OneDrive 'Documents' } } catch {}
+    
     foreach ($p in $paths | Where-Object { $_ -and (Test-Path $_) }) {
         if ((Test-Path $p) -and (Test-Path $p -PathType Container)) {
             return $p
         }
     }
+    
     return $null
 }
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -140,6 +142,38 @@ function Test-SystemCompatibility {
         Write-Status "Compatibility issues: $($issues -join ', ')" "ERROR"
         return $false
     }
+}
+
+# Helper: Get-DocumentsPath (returns first available Documents folder)
+function Get-DocumentsPath {
+    $paths = @()
+    try { $paths += [Environment]::GetFolderPath("MyDocuments") } catch {}
+    try { if ($env:USERPROFILE) { $paths += Join-Path $env:USERPROFILE 'Documents' } } catch {}
+    try { if ($env:OneDrive) { $paths += Join-Path $env:OneDrive 'Documents' } } catch {}
+    
+    foreach ($p in $paths | Where-Object { $_ -and (Test-Path $_) }) {
+        if ((Test-Path $p) -and (Test-Path $p -PathType Container)) {
+            return $p
+        }
+    }
+    
+    return $null
+}
+
+# Helper: Get-DocumentsPath (returns first available Documents folder)
+function Get-DocumentsPath {
+    $paths = @()
+    try { $paths += [Environment]::GetFolderPath("MyDocuments") } catch {}
+    try { if ($env:USERPROFILE) { $paths += Join-Path $env:USERPROFILE 'Documents' } } catch {}
+    try { if ($env:OneDrive) { $paths += Join-Path $env:OneDrive 'Documents' } } catch {}
+    
+    foreach ($p in $paths | Where-Object { $_ -and (Test-Path $_) }) {
+        if ((Test-Path $p) -and (Test-Path $p -PathType Container)) {
+            return $p
+        }
+    }
+    
+    return $null
 }
 
 function Install-ProfileContent {
