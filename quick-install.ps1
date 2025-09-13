@@ -16,6 +16,39 @@ if ($Silent) {
     $VerbosePreference = if ($Verbose) { "Continue" } else { "SilentlyContinue" }
 }
 
+# Function to refresh environment variables
+function Update-EnvironmentVariables {
+    Log "Refreshing environment variables..." "INFO"
+    
+    try {
+        # Refresh environment variables from registry
+        $envMachine = [Environment]::GetEnvironmentVariables("Machine")
+        $envUser = [Environment]::GetEnvironmentVariables("User")
+        
+        # Update PATH with latest values
+        $machinePath = $envMachine["PATH"]
+        $userPath = $envUser["PATH"]
+        $combinedPath = "$machinePath;$userPath"
+        
+        $env:PATH = $combinedPath
+        
+        # Update other important environment variables
+        foreach ($key in $envUser.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $envUser[$key], "Process")
+        }
+        
+        foreach ($key in $envMachine.Keys) {
+            if (-not $envUser.ContainsKey($key)) {
+                [Environment]::SetEnvironmentVariable($key, $envMachine[$key], "Process")
+            }
+        }
+        
+        Log "Environment variables refreshed successfully" "OK"
+    } catch {
+        Log "Warning: Could not refresh all environment variables - $($_.Exception.Message)" "WARN"
+    }
+}
+
 function Log($msg, $type="INFO") {
     $color = switch($type) {
         "OK" { "Green" }
@@ -33,31 +66,112 @@ function Log($msg, $type="INFO") {
     }
 }
 
-# Function to get all PowerShell profile directories
+# Enhanced function to detect environment and get all PowerShell profile directories
 function Get-PowerShellProfileDirs {
-    $documentsPath = [Environment]::GetFolderPath("MyDocuments")
+    Log "Detecting system environment and PowerShell installations..." "INFO"
+    
+    # Comprehensive environment variable detection
+    $envVars = @{
+        UserProfile = $env:USERPROFILE
+        UserName = $env:USERNAME
+        ComputerName = $env:COMPUTERNAME
+        OS = $env:OS
+        Architecture = $env:PROCESSOR_ARCHITECTURE
+        WinDir = $env:WINDIR
+        ProgramFiles = $env:ProgramFiles
+        ProgramFilesX86 = ${env:ProgramFiles(x86)}
+        AppData = $env:APPDATA
+        LocalAppData = $env:LOCALAPPDATA
+        OneDrive = $env:OneDrive
+        OneDriveConsumer = $env:OneDriveConsumer
+        OneDriveCommercial = $env:OneDriveCommercial
+    }
+    
+    Log "System Environment:" "INFO"
+    Log "  User: $($envVars.UserName) on $($envVars.ComputerName)" "INFO"
+    Log "  OS: $($envVars.OS) ($($envVars.Architecture))" "INFO"
+    Log "  Profile Path: $($envVars.UserProfile)" "INFO"
+    if ($envVars.OneDrive) { Log "  OneDrive: $($envVars.OneDrive)" "INFO" }
+    
+    # Try multiple methods to get Documents folder (handle OneDrive redirection)
+    $documentsPath = $null
+    $documentsPaths = @(
+        [Environment]::GetFolderPath("MyDocuments"),
+        "$($envVars.UserProfile)\Documents",
+        "$($envVars.OneDrive)\Documents",
+        "$($envVars.OneDriveConsumer)\Documents",
+        "$($envVars.OneDriveCommercial)\Documents"
+    )
+    
+    foreach ($path in $documentsPaths) {
+        if ($path -and (Test-Path $path)) {
+            $documentsPath = $path
+            Log "Documents folder detected: $documentsPath" "OK"
+            break
+        }
+    }
+    
+    if (-not $documentsPath) {
+        $documentsPath = "$($envVars.UserProfile)\Documents"
+        Log "Using fallback Documents path: $documentsPath" "WARN"
+    }
+    
     $profileDirs = @()
     
-    # PowerShell Core (7+) directory
-    $coreDir = "$documentsPath\PowerShell"
-    if ((Get-Command pwsh -ErrorAction SilentlyContinue) -or (Test-Path "$env:ProgramFiles\PowerShell\*\pwsh.exe")) {
+    # PowerShell Core (7+) detection - multiple methods
+    $pwshInstalled = $false
+    $pwshPaths = @(
+        (Get-Command pwsh -ErrorAction SilentlyContinue),
+        (Test-Path "$($envVars.ProgramFiles)\PowerShell\*\pwsh.exe"),
+        (Test-Path "$($envVars.LocalAppData)\Microsoft\PowerShell\*\pwsh.exe"),
+        (Get-ChildItem "$($envVars.ProgramFiles)\PowerShell" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+\.\d+' }),
+        (Test-Path "HKLM:\SOFTWARE\Microsoft\PowerShellCore" -ErrorAction SilentlyContinue)
+    )
+    
+    $pwshInstalled = ($pwshPaths | Where-Object { $_ }) -ne $null
+    
+    if ($pwshInstalled) {
+        $coreDir = "$documentsPath\PowerShell"
         $profileDirs += @{
             Path = $coreDir
             Name = "PowerShell Core (7+)"
             ProfileFile = "$coreDir\Microsoft.PowerShell_profile.ps1"
             Version = "Core"
         }
+        Log "PowerShell Core (7+) installation detected" "OK"
     }
     
-    # Windows PowerShell (5.1) directory
-    $winDir = "$documentsPath\WindowsPowerShell"
-    if ((Get-Command powershell -ErrorAction SilentlyContinue) -or (Test-Path "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe")) {
+    # Windows PowerShell (5.1) detection - multiple methods
+    $powershellInstalled = $false
+    $powershellPaths = @(
+        (Get-Command powershell -ErrorAction SilentlyContinue),
+        (Test-Path "$($envVars.WinDir)\System32\WindowsPowerShell\v1.0\powershell.exe"),
+        (Test-Path "$($envVars.WinDir)\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"),
+        (Test-Path "HKLM:\SOFTWARE\Microsoft\PowerShell" -ErrorAction SilentlyContinue)
+    )
+    
+    $powershellInstalled = ($powershellPaths | Where-Object { $_ }) -ne $null
+    
+    if ($powershellInstalled) {
+        $winDir = "$documentsPath\WindowsPowerShell"
         $profileDirs += @{
             Path = $winDir
             Name = "Windows PowerShell (5.1)"
             ProfileFile = "$winDir\Microsoft.PowerShell_profile.ps1"
             Version = "Desktop"
         }
+        Log "Windows PowerShell (5.1) installation detected" "OK"
+    }
+    
+    # Validate detected installations
+    Log "PowerShell installation summary:" "INFO"
+    if ($profileDirs.Count -eq 0) {
+        Log "No PowerShell installations detected!" "ERROR"
+        throw "No PowerShell installations found. Please install PowerShell first."
+    }
+    
+    foreach ($dir in $profileDirs) {
+        Log "  - $($dir.Name): $($dir.Path)" "INFO"
     }
     
     return $profileDirs
@@ -120,6 +234,9 @@ try {
     Log "Starting PowerShell profile installation..." "STEP"
     Log "Script location: $PSScriptRoot" "INFO"
     Log "Current PowerShell version: $($PSVersionTable.PSVersion)" "INFO"
+    
+    # Refresh environment variables to ensure we have the latest values
+    Update-EnvironmentVariables
     
     # Get all PowerShell directories
     $allProfileDirs = Get-PowerShellProfileDirs
@@ -209,24 +326,80 @@ try {
         
         Log "Installing profile for $targetName..." "INFO"
         
-        # Create profile directory if it doesn't exist
-        if (-not (Test-Path $targetPath)) { 
-            Log "Creating profile directory for $targetName..." "INFO"
-            New-Item -ItemType Directory -Path $targetPath -Force | Out-Null 
-            Log "Profile directory created: $targetPath" "OK"
+        # Create profile directory with robust path handling
+        try {
+            if (-not (Test-Path $targetPath)) { 
+                Log "Creating profile directory for $targetName..." "INFO"
+                
+                # Ensure parent directory exists first
+                $parentDir = Split-Path $targetPath -Parent
+                if ($parentDir -and -not (Test-Path $parentDir)) {
+                    Log "Creating parent directory: $parentDir" "INFO"
+                    New-Item -ItemType Directory -Path $parentDir -Force -ErrorAction Stop | Out-Null
+                }
+                
+                # Create the target directory
+                New-Item -ItemType Directory -Path $targetPath -Force -ErrorAction Stop | Out-Null
+                
+                # Verify directory was created
+                if (Test-Path $targetPath) {
+                    Log "Profile directory created successfully: $targetPath" "OK"
+                } else {
+                    throw "Directory creation verification failed"
+                }
+            } else {
+                Log "Profile directory already exists: $targetPath" "OK"
+            }
+        } catch {
+            Log "Failed to create profile directory for $targetName - $($_.Exception.Message)" "ERROR"
+            continue
         }
         
-        # Copy main profile file
+        # Copy main profile file with enhanced error handling
         $profileSrc = "$PSScriptRoot\Microsoft.PowerShell_profile.ps1"
         if (Test-Path $profileSrc) {
             try {
-                # Use UTF8 encoding for PowerShell files to preserve emojis
-                $content = Get-Content $profileSrc -Raw -Encoding UTF8
-                [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
-                Log "Profile copied to $targetName successfully" "OK"
+                Log "Copying profile from: $profileSrc" "INFO"
+                Log "Copying profile to: $targetProfile" "INFO"
+                
+                # Verify source file accessibility
+                $sourceContent = Get-Content $profileSrc -Raw -Encoding UTF8 -ErrorAction Stop
+                if (-not $sourceContent) {
+                    throw "Source file appears to be empty or unreadable"
+                }
+                
+                # Verify target directory is writable
+                $testFile = "$targetPath\test-write.tmp"
+                "test" | Out-File -FilePath $testFile -Force -ErrorAction Stop
+                Remove-Item $testFile -Force -ErrorAction SilentlyContinue
+                
+                # Use Copy-Item for more reliable copying
+                Copy-Item -Path $profileSrc -Destination $targetProfile -Force -ErrorAction Stop
+                
+                # Verify the copy was successful
+                if ((Test-Path $targetProfile) -and (Get-Content $targetProfile -Raw -ErrorAction SilentlyContinue)) {
+                    Log "Profile copied to $targetName successfully" "OK"
+                } else {
+                    throw "Profile copy verification failed"
+                }
             } catch {
                 Log "Failed to copy profile to $targetName - $($_.Exception.Message)" "ERROR"
-                continue
+                Log "Attempting fallback copy method..." "WARN"
+                
+                # Fallback: Try alternative copy method
+                try {
+                    $content = [System.IO.File]::ReadAllText($profileSrc, [System.Text.Encoding]::UTF8)
+                    [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
+                    
+                    if (Test-Path $targetProfile) {
+                        Log "Fallback copy successful for $targetName" "OK"
+                    } else {
+                        throw "Fallback copy also failed"
+                    }
+                } catch {
+                    Log "All copy methods failed for $targetName - $($_.Exception.Message)" "ERROR"
+                    continue
+                }
             }
         } else {
             Log "Source profile not found: $profileSrc" "ERROR"
