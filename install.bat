@@ -124,18 +124,18 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
 
     function Install-RequiredModules {
         Write-Status 'Installing required modules...' 'STEP'
-        $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons')
+        $modules = @('PSReadLine', 'posh-git', 'Terminal-Icons', 'oh-my-posh')
         foreach ($module in $modules) {
             if (-not (Get-Module -ListAvailable -Name $module)) {
-                Write-Status 'Installing $module...' 'INFO'
+                Write-Status \"Installing $module...\" 'INFO'
                 try {
                     Install-Module $module -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-                    Write-Status '$module installed successfully' 'OK'
+                    Write-Status \"$module installed successfully\" 'OK'
                 } catch {
-                    Write-Status 'Failed to install $module' 'WARN'
+                    Write-Status \"Failed to install $module\" 'WARN'
                 }
             } else {
-                Write-Status '$module already available' 'OK'
+                Write-Status \"$module already available\" 'OK'
             }
         }
     }
@@ -145,51 +145,116 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             Write-Status 'winget not available, skipping tool installation' 'WARN'
-            return
+            Write-Status 'To install winget: Visit Microsoft Store or GitHub releases' 'INFO'
+            return $false
         }
         
         $tools = @(
             @{name='oh-my-posh'; id='JanDeDobbeleer.OhMyPosh'},
-            @{name='git'; id='Git.Git'}
+            @{name='git'; id='Git.Git'},
+            @{name='zoxide'; id='ajeetdsouza.zoxide'}
         )
         
+        $successCount = 0
         foreach ($tool in $tools) {
             if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
-                Write-Status 'Installing $($tool.name)...' 'INFO'
+                Write-Status \"Installing $($tool.name)...\" 'INFO'
                 try {
-                    $process = Start-Process winget -ArgumentList 'install', $tool.id, '--silent', '--accept-source-agreements', '--accept-package-agreements' -Wait -PassThru -NoNewWindow
+                    $process = Start-Process winget -ArgumentList 'install', $tool.id, '--silent', '--accept-source-agreements', '--accept-package-agreements' -Wait -PassThru -NoNewWindow -ErrorAction Stop
                     if ($process.ExitCode -eq 0 -or $process.ExitCode -eq -1978335189) {
-                        Write-Status '$($tool.name) installed successfully' 'OK'
+                        Write-Status \"$($tool.name) installed successfully\" 'OK'
+                        $successCount++
+                    } else {
+                        Write-Status \"$($tool.name) installation failed (exit code: $($process.ExitCode))\" 'WARN'
                     }
                 } catch {
-                    Write-Status 'Failed to install $($tool.name)' 'WARN'
+                    Write-Status \"Failed to install $($tool.name): $($_.Exception.Message)\" 'WARN'
                 }
             } else {
-                Write-Status '$($tool.name) already available' 'OK'
+                Write-Status \"$($tool.name) already available\" 'OK'
+                $successCount++
             }
         }
+        
+        return ($successCount -gt 0)
     }
 
     function Test-SystemCompatibility {
         Write-Status 'Testing system compatibility...' 'STEP'
         
         $issues = @()
+        $warnings = @()
         
-        if (-not (Get-DocumentsPath)) {
+        # Check Documents folder access
+        $docsPath = Get-DocumentsPath
+        if (-not $docsPath) {
             $issues += 'No writable Documents folder found'
+        } else {
+            Write-Status \"Documents folder: $docsPath\" 'INFO'
         }
         
+        # Check PowerShell versions
         if (-not (Get-Command powershell -ErrorAction SilentlyContinue) -and 
             -not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
             $issues += 'No PowerShell installations found'
+        }
+        
+        # Check execution policy
+        $policy = Get-ExecutionPolicy -Scope CurrentUser
+        if ($policy -eq 'Restricted') {
+            $warnings += 'Execution policy is Restricted - will attempt to change'
+        }
+        
+        # Check internet connectivity
+        try {
+            $null = Invoke-WebRequest -Uri 'https://www.google.com' -UseBasicParsing -TimeoutSec 5
+            Write-Status 'Internet connectivity verified' 'OK'
+        } catch {
+            $warnings += 'Internet connectivity issues detected'
+        }
+        
+        # Check disk space (minimum 100MB)
+        $systemDrive = Get-CimInstance Win32_LogicalDisk | Where-Object DeviceID -eq $env:SystemDrive
+        $freeSpaceMB = [math]::Round($systemDrive.FreeSpace / 1MB)
+        if ($freeSpaceMB -lt 100) {
+            $issues += \"Insufficient disk space: ${freeSpaceMB}MB available\"
+        }
+        
+        # Report results
+        if ($warnings.Count -gt 0) {
+            Write-Status \"Warnings: $($warnings -join '; ')\" 'WARN'
         }
         
         if ($issues.Count -eq 0) {
             Write-Status 'System compatibility check passed' 'OK'
             return $true
         } else {
-            Write-Status 'Compatibility issues: $($issues -join \', \')' 'ERROR'
+            Write-Status \"Compatibility issues: $($issues -join '; ')\" 'ERROR'
             return $false
+        }
+    }
+
+    function Backup-ExistingProfile {
+        param($ProfilePath)
+        if (Test-Path $ProfilePath) {
+            $backupPath = \"$ProfilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')\"
+            Copy-Item $ProfilePath $backupPath -Force
+            Write-Status \"Backed up existing profile to $(Split-Path $backupPath -Leaf)\" 'INFO'
+            return $backupPath
+        }
+        return $null
+    }
+
+    function Restore-ProfileBackups {
+        param($ProfileDirs)
+        Write-Status 'Restoring profile backups due to installation failure...' 'WARN'
+        foreach ($profileDir in $ProfileDirs) {
+            $backupFiles = Get-ChildItem \"$($profileDir.ProfileFile).backup.*\" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+            if ($backupFiles) {
+                $latestBackup = $backupFiles[0]
+                Copy-Item $latestBackup.FullName $profileDir.ProfileFile -Force
+                Write-Status \"Restored backup: $($latestBackup.Name)\" 'INFO'
+            }
         }
     }
 
@@ -201,25 +266,31 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         $scriptDir = '%TEMP_DIR%\powershell-main'
         
         foreach ($profileDir in $ProfileDirs) {
-            Write-Status 'Configuring $($profileDir.Name)...' 'INFO'
+            Write-Status \"Configuring $($profileDir.Name)...\" 'INFO'
             
+            # Create directory if it doesn't exist
             if (-not (Test-Path $profileDir.Path)) {
                 New-Item -ItemType Directory -Path $profileDir.Path -Force | Out-Null
             }
             
+            # Backup existing profile before overwriting
+            Backup-ExistingProfile -ProfilePath $profileDir.ProfileFile | Out-Null
+            
+            # Install new profile
             $profileSrc = Join-Path $scriptDir 'Microsoft.PowerShell_profile.ps1'
             if (Test-Path $profileSrc) {
                 Copy-Item $profileSrc $profileDir.ProfileFile -Force | Out-Null
-                Write-Status 'Profile copied for $($profileDir.Name)' 'OK'
+                Write-Status \"Profile installed for $($profileDir.Name)\" 'OK'
             } else {
                 Write-Status 'Profile source file not found' 'ERROR'
             }
             
+            # Install theme file
             $themeSrc = Join-Path $scriptDir 'oh-my-posh-default.json'
             if (Test-Path $themeSrc) {
                 $themeDst = Join-Path $profileDir.Path 'oh-my-posh-default.json'
                 Copy-Item $themeSrc $themeDst -Force | Out-Null
-                Write-Status 'Theme copied for $($profileDir.Name)' 'OK'
+                Write-Status \"Theme installed for $($profileDir.Name)\" 'OK'
             }
         }
     }
@@ -232,9 +303,9 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         $success = $true
         foreach ($profileDir in $ProfileDirs) {
             if (Test-Path $profileDir.ProfileFile) {
-                Write-Status '$($profileDir.Name): Profile installed' 'OK'
+                Write-Status \"$($profileDir.Name): Profile installed\" 'OK'
             } else {
-                Write-Status '$($profileDir.Name): Profile missing' 'ERROR'
+                Write-Status \"$($profileDir.Name): Profile missing\" 'ERROR'
                 $success = $false
             }
         }
@@ -242,34 +313,49 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         return $success
     }
 
-    # Main Installation Logic
-    try {
-        Write-Status 'Starting PowerShell profile installation...' 'STEP'
-        
-        if (-not (Test-SystemCompatibility)) {
-            throw 'System compatibility test failed'
-        }
-        
-        Write-Status 'Setting execution policy...' 'INFO'
+        # Main Installation Logic
         try {
-            Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction Stop
-        } catch {
-            Write-Status 'Could not set execution policy' 'WARN'
-        }
-        
-        $profileDirs = Get-ProfileDirectories
-        Write-Status 'Found $($profileDirs.Count) PowerShell installation(s)' 'INFO'
-        
-        Install-RequiredModules
-        Install-RequiredTools
-        
-        $env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-        
-        Install-ProfileContent -ProfileDirs $profileDirs
-        
-        $verificationResult = Test-Installation -ProfileDirs $profileDirs
-        
-        Write-Host ''
+            Write-Status 'Starting PowerShell profile installation...' 'STEP'
+            
+            if (-not (Test-SystemCompatibility)) {
+                throw 'System compatibility test failed - see issues above'
+            }
+            
+            Write-Status 'Setting execution policy...' 'INFO'
+            try {
+                Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction Stop
+                Write-Status 'Execution policy updated successfully' 'OK'
+            } catch {
+                Write-Status 'Could not set execution policy - continuing anyway' 'WARN'
+            }
+            
+            $profileDirs = Get-ProfileDirectories
+            Write-Status \"Found $($profileDirs.Count) PowerShell installation(s)\" 'INFO'
+            
+            # Install dependencies with error checking
+            Write-Status 'Installing PowerShell modules...' 'STEP'
+            Install-RequiredModules
+            
+            Write-Status 'Installing external tools...' 'STEP'
+            $toolsSuccess = Install-RequiredTools
+            if (-not $toolsSuccess) {
+                Write-Status 'Tool installation had issues - some features may not work' 'WARN'
+            }
+            
+            # Refresh PATH environment
+            Write-Status 'Refreshing environment PATH...' 'INFO'
+            $env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+            
+            # Install profile content
+            Install-ProfileContent -ProfileDirs $profileDirs
+            
+            # Verify installation
+            $verificationResult = Test-Installation -ProfileDirs $profileDirs
+            
+            if (-not $verificationResult) {
+                Restore-ProfileBackups -ProfileDirs $profileDirs
+                throw 'Profile installation verification failed'
+            }        Write-Host ''
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
         Write-Host '                INSTALLATION COMPLETE' -ForegroundColor Cyan
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Cyan
@@ -278,7 +364,7 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         foreach ($profileDir in $profileDirs) {
             $status = if (Test-Path $profileDir.ProfileFile) { '[OK]' } else { '[FAIL]' }
             $color = if (Test-Path $profileDir.ProfileFile) { 'Green' } else { 'Red' }
-            Write-Host '  $status $($profileDir.Name)' -ForegroundColor $color
+            Write-Host \"  $status $($profileDir.Name)\" -ForegroundColor $color
         }
         Write-Host ''
         Write-Host 'Next Steps:' -ForegroundColor Cyan
@@ -293,12 +379,12 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         }
         
     } catch {
-        Write-Status 'Installation failed: $($_.Exception.Message)' 'ERROR'
+        Write-Status \"Installation failed: $($_.Exception.Message)\" 'ERROR'
         Write-Host ''
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Red
         Write-Host '                INSTALLATION FAILED' -ForegroundColor Red
         Write-Host '═══════════════════════════════════════════════════════════════' -ForegroundColor Red
-        Write-Host 'Error: $($_.Exception.Message)' -ForegroundColor Red
+        Write-Host \"Error: $($_.Exception.Message)\" -ForegroundColor Red
         Write-Host ''
         Write-Host 'Troubleshooting:' -ForegroundColor Yellow
         Write-Host '1. Run as Administrator' -ForegroundColor White

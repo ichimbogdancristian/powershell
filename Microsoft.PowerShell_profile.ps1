@@ -69,6 +69,10 @@ if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
 
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
     Invoke-Expression (& { (zoxide init powershell | Out-String) })
+    
+    # Enhanced zoxide functions
+    function zz { z $args; Get-ChildItemColorized }  # Jump and list contents
+    function zh { zoxide query --list | Select-Object -First 10 }  # Show recent directories
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -155,7 +159,9 @@ function Get-ProfileHelp {
     Write-Host "  ll [path]     - Enhanced directory listing" -ForegroundColor White
     Write-Host "  la [path]     - Show all files (including hidden)" -ForegroundColor White
     Write-Host "  lsl [path]    - Long format listing" -ForegroundColor White
-    Write-Host "  z [dir]       - Smart directory jump (if zoxide installed)" -ForegroundColor White
+    Write-Host "  z [dir]       - Smart directory jump (zoxide)" -ForegroundColor White
+    Write-Host "  zz [dir]      - Jump and list contents" -ForegroundColor White
+    Write-Host "  zh            - Show recent directories" -ForegroundColor White
     Write-Host ""
     Write-Host "System Information:" -ForegroundColor Yellow
     Write-Host "  neofetch      - System information display" -ForegroundColor White
@@ -188,7 +194,7 @@ Set-Alias -Name health -Value Get-SystemHealth -Force
 Set-Alias -Name myip -Value Get-PublicIP -Force
 Set-Alias -Name testnet -Value Test-InternetConnection -Force
 Set-Alias -Name gs -Value Get-GitStatus -Force
-Set-Alias -Name gl -Value Get-GitLog -Force
+Set-Alias -Name gl -Value Get-GitLog -Force -ErrorAction SilentlyContinue
 Set-Alias -Name ps-name -Value Get-ProcessesByName -Force
 Set-Alias -Name help-profile -Value Get-ProfileHelp -Force
 

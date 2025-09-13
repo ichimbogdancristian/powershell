@@ -4,19 +4,16 @@ A streamlined PowerShell profile with Linux-like aliases, system monitoring, and
 
 ## Quick Installation
 
-**🚀 Ultra-fast installation:**
+**🚀 One-click installation:**
 ```batch
-quick-setup-optimized.bat
+install.bat
 ```
 
-**📦 Local installation:**
+**📦 Alternative method:**
 ```powershell
-.\quick-install-optimized.ps1
-```
-
-**🧪 Test compatibility:**
-```powershell
-.\quick-install-optimized.ps1 -TestCompatibility
+# Download and run manually
+Invoke-WebRequest -Uri "https://github.com/ichimbogdancristian/powershell/raw/main/install.bat" -OutFile "install.bat"
+.\install.bat
 ```
 
 ## ✨ Features
@@ -25,7 +22,7 @@ quick-setup-optimized.bat
 - **📊 System monitoring**: Real-time CPU, memory, and disk usage
 - **🔧 Git integration**: Enhanced git status and shortcuts (`gs`, `gl`)
 - **🎨 Oh My Posh themes**: Beautiful customizable prompts
-- **📁 Enhanced navigation**: Smart directory listing and zoxide integration
+- **📁 Smart navigation**: Enhanced directory listing with zoxide smart jumping (`z` command)
 - **⚡ Cross-platform**: Supports both PowerShell 5.1 and 7+
 - **🔄 Optimized**: Fast loading, minimal resource usage
 
@@ -54,6 +51,7 @@ After installation, try these commands:
 ```powershell
 neofetch        # System information
 ll              # Enhanced directory listing
+z documents     # Smart jump to Documents folder
 health          # System health check
 myip            # Show public IP
 gs              # Git status
@@ -75,14 +73,24 @@ The installer automatically detects Documents folders in this order:
 2. **User Documents**: `%USERPROFILE%\Documents`
 3. **OneDrive Documents**: `%OneDrive%\Documents` (if available)
 
-### Verification Commands
-```powershell
-# Test system compatibility
-.\quick-install-optimized.ps1 -TestCompatibility
+### Installation Process
+The `install.bat` file automatically:
+- Checks for administrator privileges
+- Downloads the latest version from GitHub
+- Installs required PowerShell modules (PSReadLine, posh-git, Terminal-Icons)
+- Installs productivity tools (Oh My Posh, Git, Zoxide)
+- Configures profiles for all PowerShell versions
+- Sets up custom Oh My Posh themes
 
-# Verify installation
-.\quick-install-optimized.ps1 -VerifyInstallation
+### Smart Directory Navigation with Zoxide
+After installation, use the `z` command for intelligent directory jumping:
+```powershell
+z documents     # Jump to Documents folder
+z desktop       # Jump to Desktop
+z proj          # Jump to your most-used "project" folder
+z pow setup     # Jump to PowerShell setup directory
 ```
+Zoxide learns your navigation patterns and gets smarter over time!
 
 ## Theme Customization
 
