@@ -88,37 +88,103 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
 
     function Get-DocumentsPath {
         $paths = @()
-        try { $paths += [Environment]::GetFolderPath('MyDocuments') } catch {}
-        try { if ($env:USERPROFILE) { $paths += Join-Path $env:USERPROFILE 'Documents' } } catch {}
-        try { if ($env:OneDrive) { $paths += Join-Path $env:OneDrive 'Documents' } } catch {}
         
-        foreach ($p in $paths | Where-Object { $_ -and (Test-Path $_) }) {
-            if ((Test-Path $p) -and (Test-Path $p -PathType Container)) {
-                return $p
+        # Method 1: .NET Environment (most reliable)
+        try { 
+            $envPath = [Environment]::GetFolderPath('MyDocuments')
+            if ($envPath -and (Test-Path $envPath)) { $paths += $envPath }
+        } catch {}
+        
+        # Method 2: USERPROFILE + Documents
+        try { 
+            if ($env:USERPROFILE) { 
+                $userPath = Join-Path $env:USERPROFILE 'Documents'
+                if ($userPath -and (Test-Path $userPath)) { $paths += $userPath }
             }
+        } catch {}
+        
+        # Method 3: OneDrive Documents (multiple possible locations)
+        try { 
+            if ($env:OneDrive) {
+                $oneDrivePaths = @(
+                    (Join-Path $env:OneDrive 'Documents'),
+                    (Join-Path (Split-Path $env:OneDrive -Parent) 'Documents'),
+                    (Join-Path $env:USERPROFILE 'OneDrive\Documents')
+                )
+                foreach ($odPath in $oneDrivePaths) {
+                    if ($odPath -and (Test-Path $odPath)) { 
+                        $paths += $odPath
+                        break  # Use first valid OneDrive Documents found
+                    }
+                }
+            }
+        } catch {}
+        
+        # Return first valid path, preferring Environment method
+        $validPaths = $paths | Where-Object { $_ -and (Test-Path $_ -PathType Container) } | Select-Object -Unique
+        if ($validPaths) {
+            return $validPaths[0]
         }
         return $null
     }
 
     function Get-ProfileDirectories {
         $dirs = @()
-        $pwshPaths = @(
-            $PROFILE.AllUsersCurrentHost,
-            $PROFILE.AllUsersAllHosts,
-            $PROFILE.CurrentUserCurrentHost,
-            $PROFILE.CurrentUserAllHosts
-        ) | Select-Object -Unique
-
-        foreach ($profilePath in $pwshPaths) {
+        $docsPath = Get-DocumentsPath
+        
+        if (-not $docsPath) {
+            throw 'No valid Documents folder found for profile installation'
+        }
+        
+        # Define all possible PowerShell profile locations for PS5 and PS7
+        $profilePaths = @()
+        
+        # Windows PowerShell 5.1 profiles
+        $ps5Profiles = @(
+            (Join-Path $docsPath 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1'),
+            (Join-Path $docsPath 'WindowsPowerShell\profile.ps1')
+        )
+        
+        # PowerShell Core 6+ profiles  
+        $ps7Profiles = @(
+            (Join-Path $docsPath 'PowerShell\Microsoft.PowerShell_profile.ps1'),
+            (Join-Path $docsPath 'PowerShell\profile.ps1')
+        )
+        
+        # System-wide profiles (if accessible)
+        $systemProfiles = @()
+        if (Get-Command powershell -ErrorAction SilentlyContinue) {
+            $systemProfiles += 'C:\Windows\System32\WindowsPowerShell\v1.0\Microsoft.PowerShell_profile.ps1'
+        }
+        if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+            # Try to find PowerShell Core system installation
+            $pwshExe = Get-Command pwsh -ErrorAction SilentlyContinue
+            if ($pwshExe) {
+                $pwshDir = Split-Path (Split-Path $pwshExe.Source) -Parent
+                $systemProfiles += Join-Path $pwshDir 'profile.ps1'
+            }
+        }
+        
+        # Combine all profiles and create directory objects
+        $allProfiles = $ps5Profiles + $ps7Profiles + $systemProfiles
+        
+        foreach ($profilePath in $allProfiles) {
             if ($profilePath) {
                 $dir = Split-Path $profilePath -Parent
+                $psVersion = if ($profilePath -like '*WindowsPowerShell*') { 'PS5.1' } 
+                            elseif ($profilePath -like '*PowerShell\*') { 'PS7+' } 
+                            else { 'System' }
+                
                 $dirs += [PSCustomObject]@{
-                    Name = $profilePath
+                    Name = \"$psVersion - $(Split-Path $profilePath -Leaf)\"
                     Path = $dir
                     ProfileFile = $profilePath
+                    PSVersion = $psVersion
                 }
             }
         }
+        
+        Write-Status \"Found $($dirs.Count) PowerShell profile locations\" 'INFO'
         return $dirs
     }
 
@@ -307,7 +373,23 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
         
         Write-Status 'Installing profile content...' 'STEP'
         
-        $scriptDir = '%TEMP_DIR%\powershell-main'
+        # Dynamically find extracted repository directory (don't assume 'powershell-main')
+        $tempDir = '%TEMP_DIR%'
+        $extractedDirs = Get-ChildItem $tempDir -Directory | Where-Object Name -like '*powershell*'
+        
+        if ($extractedDirs) {
+            $scriptDir = $extractedDirs[0].FullName
+            Write-Status \"Found repository directory: $(Split-Path $scriptDir -Leaf)\" 'INFO'
+        } else {
+            # Fallback to expected name
+            $scriptDir = Join-Path $tempDir 'powershell-main'
+            Write-Status \"Using fallback directory: powershell-main\" 'WARN'
+        }
+        
+        # Validate repository directory exists
+        if (-not (Test-Path $scriptDir)) {
+            throw \"Repository directory not found: $scriptDir\"
+        }
         
         foreach ($profileDir in $ProfileDirs) {
             Write-Status \"Configuring $($profileDir.Name)...\" 'INFO'
@@ -320,21 +402,32 @@ powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -Comma
             # Backup existing profile before overwriting
             Backup-ExistingProfile -ProfilePath $profileDir.ProfileFile | Out-Null
             
-            # Install new profile
+            # Validate and install profile file
             $profileSrc = Join-Path $scriptDir 'Microsoft.PowerShell_profile.ps1'
             if (Test-Path $profileSrc) {
-                Copy-Item $profileSrc $profileDir.ProfileFile -Force | Out-Null
-                Write-Status \"Profile installed for $($profileDir.Name)\" 'OK'
+                try {
+                    Copy-Item $profileSrc $profileDir.ProfileFile -Force -ErrorAction Stop
+                    Write-Status \"Profile installed for $($profileDir.Name)\" 'OK'
+                } catch {
+                    Write-Status \"Failed to copy profile for $($profileDir.Name): $($_.Exception.Message)\" 'ERROR'
+                }
             } else {
-                Write-Status 'Profile source file not found' 'ERROR'
+                Write-Status \"Profile source file not found: $profileSrc\" 'ERROR'
+                throw 'Critical installation file missing - profile source not found'
             }
             
-            # Install theme file
+            # Validate and install theme file
             $themeSrc = Join-Path $scriptDir 'oh-my-posh-default.json'
             if (Test-Path $themeSrc) {
-                $themeDst = Join-Path $profileDir.Path 'oh-my-posh-default.json'
-                Copy-Item $themeSrc $themeDst -Force | Out-Null
-                Write-Status \"Theme installed for $($profileDir.Name)\" 'OK'
+                try {
+                    $themeDst = Join-Path $profileDir.Path 'oh-my-posh-default.json'
+                    Copy-Item $themeSrc $themeDst -Force -ErrorAction Stop
+                    Write-Status \"Theme installed for $($profileDir.Name)\" 'OK'
+                } catch {
+                    Write-Status \"Failed to copy theme for $($profileDir.Name): $($_.Exception.Message)\" 'WARN'
+                }
+            } else {
+                Write-Status \"Theme source file not found: $themeSrc\" 'WARN'
             }
         }
     }
