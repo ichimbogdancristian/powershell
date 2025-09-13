@@ -4,7 +4,13 @@
 # Always overwrites existing profiles with enhanced PowerShell configuration
 # ═══════════════════════════════════════════════════════════════════════════════
 
-param([switch]$Silent, [switch]$Verbose)
+param(
+    [switch]$Silent,
+    [switch]$Verbose,
+    [switch]$TestCompatibility,
+    [switch]$VerifyInstallation,
+    [switch]$VerifyTheme
+)
 
 # Configure output preferences
 if ($Silent) { 
@@ -15,6 +21,248 @@ if ($Silent) {
     $WarningPreference = "Continue"
     $VerbosePreference = if ($Verbose) { "Continue" } else { "SilentlyContinue" }
 }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Embedded Content
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# PowerShell Profile Content (embedded - condensed version)
+$script:EmbeddedProfile = @'
+# PowerShell Enhanced Profile - Condensed Version
+# This is a fallback profile when external files are not available
+
+# Module Imports
+$localModulesPath = Join-Path (Split-Path $PROFILE -Parent) "Modules"
+if ((Test-Path $localModulesPath) -and ($env:PSModulePath -notlike "*$localModulesPath*")) {
+    $env:PSModulePath = "$localModulesPath;$env:PSModulePath"
+}
+
+try { Import-Module PSReadLine -Force -ErrorAction SilentlyContinue } catch { }
+try { Import-Module posh-git -Force -ErrorAction SilentlyContinue } catch { }
+try { Import-Module Terminal-Icons -Force -ErrorAction SilentlyContinue } catch { }
+
+# PSReadLine Configuration
+Set-PSReadLineOption -EditMode Windows
+Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+Set-PSReadLineKeyHandler -Key Ctrl+d -Function DeleteChar
+
+# Oh My Posh Configuration
+$projectTheme = Join-Path (Split-Path $PROFILE -Parent) "oh-my-posh-default.json"
+if ((Get-Command oh-my-posh -ErrorAction SilentlyContinue) -and (Test-Path $projectTheme)) {
+    try {
+        oh-my-posh init pwsh --config $projectTheme | Invoke-Expression
+    } catch {
+        Write-Warning "Failed to load Oh My Posh theme"
+    }
+}
+
+# Linux-like Aliases
+Set-Alias -Name ll -Value Get-ChildItemColorized -Force -ErrorAction SilentlyContinue
+Set-Alias -Name la -Value Get-ChildItemAll -Force -ErrorAction SilentlyContinue
+Set-Alias -Name grep -Value Select-String -Force -ErrorAction SilentlyContinue
+Set-Alias -Name which -Value Get-Command -Force -ErrorAction SilentlyContinue
+
+# Enhanced Functions
+function Get-ChildItemColorized { Get-ChildItem @args | Format-Table -AutoSize }
+function Get-ChildItemAll { Get-ChildItem -Force @args | Format-Table -AutoSize }
+
+function Get-SystemHealth {
+    $os = Get-CimInstance Win32_OperatingSystem
+    $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    Write-Host "System Health:" -ForegroundColor Cyan
+    Write-Host "  CPU: $($cpu.Name)" -ForegroundColor White
+    Write-Host "  OS: $($os.Caption)" -ForegroundColor White
+    Write-Host "  Uptime: $((Get-Date) - $os.LastBootUpTime)" -ForegroundColor White
+}
+
+function Get-ProfileHelp {
+    Write-Host "Available Commands:" -ForegroundColor Cyan
+    Write-Host "  ll, la - Enhanced directory listing" -ForegroundColor White
+    Write-Host "  health - System health check" -ForegroundColor White
+    Write-Host "  help-profile - Show this help" -ForegroundColor White
+    Write-Host "" -ForegroundColor White
+    Write-Host "Note: This is a condensed profile. Install the full version for more features." -ForegroundColor Yellow
+}
+
+Set-Alias -Name health -Value Get-SystemHealth -Force -ErrorAction SilentlyContinue
+Set-Alias -Name help-profile -Value Get-ProfileHelp -Force -ErrorAction SilentlyContinue
+
+# Welcome Message
+Write-Host "PowerShell Enhanced Profile Loaded (Condensed Version)" -ForegroundColor Green
+Write-Host "Run 'help-profile' for available commands" -ForegroundColor Gray
+'@
+
+# Oh My Posh Theme Content (embedded)
+$script:EmbeddedTheme = @'
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "background": "#2D3748",
+          "foreground": "#ffffff",
+          "leading_diamond": "\ue0b6",
+          "properties": {
+            "windows": "\uf17a",
+            "linux": "\ue712",
+            "macos": "\ue711"
+          },
+          "style": "diamond",
+          "template": "{{ if .WSL }}WSL at {{ end }}{{ .Icon }}",
+          "type": "os"
+        },
+        {
+          "background": "#4A5568",
+          "foreground": "#ffffff",
+          "powerline_symbol": "\ue0b0",
+          "properties": {
+            "style": "mixed",
+            "max_depth": 3,
+            "folder_icon": "\uf07b",
+            "home_icon": "\uf015"
+          },
+          "style": "powerline",
+          "template": " \uf07c {{ .Path }} ",
+          "type": "path"
+        },
+        {
+          "background": "#68D391",
+          "foreground": "#1A202C",
+          "powerline_symbol": "\ue0b0",
+          "style": "powerline",
+          "template": " \uf898 {{ if .PackageManagerIcon }}{{ .PackageManagerIcon }} {{ end }}{{ .Full }} ",
+          "type": "node"
+        },
+        {
+          "background": "#3182CE",
+          "foreground": "#ffffff",
+          "powerline_symbol": "\ue0b0",
+          "properties": {
+            "fetch_version": true,
+            "display_mode": "context"
+          },
+          "style": "powerline",
+          "template": " \uf81f {{ if .Error }}{{ .Error }}{{ else }}{{ if .Venv }}\uf10c {{ .Venv }} {{ end }}{{ .Full }}{{ end }} ",
+          "type": "python"
+        },
+        {
+          "background": "#F7FAFC",
+          "background_templates": [
+            "{{ if or (.Working.Changed) (.Staging.Changed) }}#F56565{{ end }}",
+            "{{ if and (gt .Ahead 0) (gt .Behind 0) }}#ED8936{{ end }}",
+            "{{ if gt .Ahead 0 }}#38B2AC{{ end }}",
+            "{{ if gt .Behind 0 }}#9F7AEA{{ end }}"
+          ],
+          "foreground": "#2D3748",
+          "powerline_symbol": "\ue0b0",
+          "properties": {
+            "fetch_status": true,
+            "fetch_upstream_icon": true,
+            "fetch_worktree_count": true
+          },
+          "style": "powerline",
+          "template": " \uf1d3 {{ .UpstreamIcon }}{{ .HEAD }}{{if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} \uf448 {{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }} \uf046 {{ .Staging.String }}{{ end }} ",
+          "type": "git"
+        },
+        {
+          "background": "#E53E3E",
+          "foreground": "#ffffff",
+          "powerline_symbol": "\ue0b0",
+          "style": "powerline",
+          "template": " \uf071 {{ .Meaning }} ",
+          "type": "status"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "right",
+      "segments": [
+        {
+          "background": "#805AD5",
+          "foreground": "#ffffff",
+          "invert_powerline": true,
+          "powerline_symbol": "\ue0b2",
+          "properties": {
+            "always_enabled": true,
+            "style": "round"
+          },
+          "style": "powerline",
+          "template": " \uf252 {{ .FormattedMs }} ",
+          "type": "executiontime"
+        },
+        {
+          "background": "#38A169",
+          "foreground": "#ffffff",
+          "invert_powerline": true,
+          "powerline_symbol": "\ue0b2",
+          "style": "powerline",
+          "template": " \uf011 {{ .CurrentDate | date \"15:04:05\" }} ",
+          "type": "time"
+        },
+        {
+          "background": "#FBB040",
+          "foreground": "#1A202C",
+          "invert_powerline": true,
+          "powerline_symbol": "\ue0b2",
+          "style": "powerline",
+          "template": " \uf2dc \ufc6e {{ .UserName }}@{{ .HostName }} ",
+          "type": "session"
+        },
+        {
+          "background": "#ECC94B",
+          "foreground": "#1A202C",
+          "invert_powerline": true,
+          "powerline_symbol": "\ue0b2",
+          "style": "powerline",
+          "template": " \u26a1 ",
+          "type": "root"
+        },
+        {
+          "background": "#1A365D",
+          "foreground": "#ffffff",
+          "invert_powerline": true,
+          "style": "diamond",
+          "template": " \uf489 {{ .Name }} ",
+          "trailing_diamond": "\ue0b4",
+          "type": "shell"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "foreground": "#ECC94B",
+          "style": "plain",
+          "template": " \uf0e7 ",
+          "type": "root"
+        },
+        {
+          "foreground_templates": [
+            "{{ if gt .Code 0 }}#F56565{{ end }}",
+            "{{ if eq .Code 0 }}#68D391{{ end }}"
+          ],
+          "properties": {
+            "always_enabled": true
+          },
+          "style": "plain",
+          "template": "<#4FD1C7>\u276f</> ",
+          "type": "status"
+        }
+      ],
+      "type": "prompt"
+    }
+  ],
+  "console_title_template": "{{ .Folder }}{{ if .Root }} (Admin){{ end }}",
+  "final_space": true,
+  "version": 3
+}
+'@
 
 # Function to refresh environment variables
 function Update-EnvironmentVariables {
@@ -246,10 +494,189 @@ function Clear-OldProfiles {
     }
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Verification Functions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+function Test-SystemCompatibility {
+    param([switch]$Detailed)
+    
+    Log "Testing system compatibility..." "STEP"
+    $issues = @()
+    
+    # Test Documents folder detection
+    if ($Detailed) {
+        Log "Testing Documents folder detection..." "INFO"
+    }
+    $docs = @(
+        "$env:OneDrive\Documents",
+        "$env:OneDrive\Documente",
+        [Environment]::GetFolderPath("MyDocuments"),
+        "$env:USERPROFILE\Documents"
+    )
+    
+    $foundDocs = $docs | Where-Object { $_ -and (Test-Path $_) }
+    if ($foundDocs.Count -eq 0) {
+        $issues += "No Documents folder found"
+        Log "❌ No Documents folder found" "ERROR"
+    } else {
+        if ($Detailed) {
+            Log "✅ Found $($foundDocs.Count) Documents locations" "OK"
+            $foundDocs | ForEach-Object { Log "    $_" "INFO" }
+        }
+    }
+    
+    # Test PowerShell installations
+    if ($Detailed) {
+        Log "Testing PowerShell installations..." "INFO"
+    }
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    $powershell = Get-Command powershell -ErrorAction SilentlyContinue
+    
+    if (-not $pwsh -and -not $powershell) {
+        $issues += "No PowerShell installations found"
+        Log "❌ No PowerShell installations found" "ERROR"
+    } else {
+        if ($pwsh -and $Detailed) { Log "✅ PowerShell Core found" "OK" }
+        if ($powershell -and $Detailed) { Log "✅ Windows PowerShell found" "OK" }
+    }
+    
+    # Test required tools
+    if ($Detailed) {
+        Log "Testing required tools..." "INFO"
+    }
+    $tools = @("git")
+    foreach ($tool in $tools) {
+        if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+            $issues += "$tool not found"
+            if ($Detailed) { Log "⚠️  $tool not found (will be installed)" "WARN" }
+        } elseif ($Detailed) {
+            Log "✅ $tool found" "OK"
+        }
+    }
+    
+    if ($issues.Count -eq 0) {
+        Log "✅ System compatibility check passed" "OK"
+        return $true
+    } else {
+        Log "⚠️  Compatibility issues found: $($issues -join ', ')" "WARN"
+        return $false
+    }
+}
+
+function Test-InstallationVerification {
+    param($ProfileDirs)
+    
+    Log "Verifying installation..." "STEP"
+    $allGood = $true
+    
+    foreach ($profileDir in $ProfileDirs) {
+        if (Test-Path $profileDir.ProfileFile) {
+            Log "✅ Profile installed: $($profileDir.Name)" "OK"
+            
+            # Test profile content
+            $content = Get-Content $profileDir.ProfileFile -Raw -ErrorAction SilentlyContinue
+            if ($content -and $content.Length -gt 1000) {
+                Log "✅ Profile content verified: $($profileDir.Name)" "OK"
+            } else {
+                Log "⚠️  Profile content seems incomplete: $($profileDir.Name)" "WARN"
+                $allGood = $false
+            }
+        } else {
+            Log "❌ Profile not found: $($profileDir.Name)" "ERROR"
+            $allGood = $false
+        }
+        
+        # Test modules directory
+        $modulesDir = Join-Path (Split-Path $profileDir.ProfileFile -Parent) "Modules"
+        if (Test-Path $modulesDir) {
+            Log "✅ Modules directory found: $($profileDir.Name)" "OK"
+        } else {
+            Log "⚠️  Modules directory missing: $($profileDir.Name)" "WARN"
+        }
+        
+        # Test theme file
+        $themeFile = Join-Path (Split-Path $profileDir.ProfileFile -Parent) "oh-my-posh-default.json"
+        if (Test-Path $themeFile) {
+            Log "✅ Theme file found: $($profileDir.Name)" "OK"
+        } else {
+            Log "⚠️  Theme file missing: $($profileDir.Name)" "WARN"
+        }
+    }
+    
+    return $allGood
+}
+
+function Test-ThemeVerification {
+    Log "Verifying Oh My Posh theme installation..." "STEP"
+    
+    # Check if Oh My Posh is available
+    $ohMyPoshPath = Get-Command oh-my-posh -ErrorAction SilentlyContinue
+    if (-not $ohMyPoshPath) {
+        Log "⚠️  Oh My Posh not found in PATH (will be available after restart)" "WARN"
+        return $false
+    }
+    
+    Log "✅ Oh My Posh found at: $($ohMyPoshPath.Source)" "OK"
+    
+    # Check theme file in expected locations
+    $themeLocations = @(
+        (Join-Path $PSScriptRoot "oh-my-posh-default.json")
+    )
+    
+    $foundTheme = $null
+    foreach ($location in $themeLocations) {
+        if (Test-Path $location) {
+            $foundTheme = $location
+            Log "✅ Theme found at: $location" "OK"
+            break
+        }
+    }
+    
+    if (-not $foundTheme) {
+        Log "⚠️  Theme file not found in expected locations" "WARN"
+        return $false
+    }
+    
+    # Test theme file validity
+    try {
+        $themeContent = Get-Content $foundTheme -Raw | ConvertFrom-Json
+        if ($themeContent.'$schema') {
+            Log "✅ Theme file is valid JSON with proper schema" "OK"
+            return $true
+        }
+    } catch {
+        Log "❌ Theme file is not valid JSON" "ERROR"
+        return $false
+    }
+    
+    return $true
+}
+
+# Handle verification-only modes
+if ($TestCompatibility) {
+    Test-SystemCompatibility -Detailed
+    exit
+}
+
+if ($VerifyInstallation) {
+    $allProfileDirs = Get-PowerShellProfileDirs
+    $result = Test-InstallationVerification -ProfileDirs $allProfileDirs
+    exit ($result ? 0 : 1)
+}
+
+if ($VerifyTheme) {
+    $result = Test-ThemeVerification
+    exit ($result ? 0 : 1)
+}
+
 try {
     Log "Starting PowerShell profile installation..." "STEP"
     Log "Script location: $PSScriptRoot" "INFO"
     Log "Current PowerShell version: $($PSVersionTable.PSVersion)" "INFO"
+    
+    # Run compatibility test first
+    Test-SystemCompatibility
     
     # Refresh environment variables to ensure we have the latest values
     Update-EnvironmentVariables
@@ -428,67 +855,64 @@ try {
             continue
         }
         
-        # Copy main profile file with enhanced error handling
-        $profileSrc = "$PSScriptRoot\Microsoft.PowerShell_profile.ps1"
-        if (Test-Path $profileSrc) {
-            try {
-                Log "Copying profile from: $profileSrc" "INFO"
-                Log "Copying profile to: $targetProfile" "INFO"
-                
-                # Verify source file accessibility
-                $sourceContent = Get-Content $profileSrc -Raw -Encoding UTF8 -ErrorAction Stop
-                if (-not $sourceContent) {
-                    throw "Source file appears to be empty or unreadable"
-                }
-                
-                # Verify target directory is writable
-                $testFile = "$targetPath\test-write.tmp"
-                "test" | Out-File -FilePath $testFile -Force -ErrorAction Stop
-                Remove-Item $testFile -Force -ErrorAction SilentlyContinue
-                
-                # Use Copy-Item for more reliable copying
-                Copy-Item -Path $profileSrc -Destination $targetProfile -Force -ErrorAction Stop
-                
-                # Verify the copy was successful
-                if ((Test-Path $targetProfile) -and (Get-Content $targetProfile -Raw -ErrorAction SilentlyContinue)) {
-                    Log "Profile copied to $targetName successfully" "OK"
-                } else {
-                    throw "Profile copy verification failed"
-                }
-            } catch {
-                Log "Failed to copy profile to $targetName - $($_.Exception.Message)" "ERROR"
-                Log "Attempting fallback copy method..." "WARN"
-                
-                # Fallback: Try alternative copy method
-                try {
-                    $content = [System.IO.File]::ReadAllText($profileSrc, [System.Text.Encoding]::UTF8)
-                    [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
-                    
-                    if (Test-Path $targetProfile) {
-                        Log "Fallback copy successful for $targetName" "OK"
-                    } else {
-                        throw "Fallback copy also failed"
-                    }
-                } catch {
-                    Log "All copy methods failed for $targetName - $($_.Exception.Message)" "ERROR"
-                    continue
-                }
+        # Create profile content from embedded source
+        try {
+            Log "Creating profile for $targetName" "INFO"
+            
+            # Verify target directory is writable
+            $testFile = "$targetPath\test-write.tmp"
+            "test" | Out-File -FilePath $testFile -Force -ErrorAction Stop
+            Remove-Item $testFile -Force -ErrorAction SilentlyContinue
+            
+            # Create profile content from external file if available, otherwise use fallback
+            $profileContent = $null
+            $profileSrc = "$PSScriptRoot\Microsoft.PowerShell_profile.ps1"
+            
+            if (Test-Path $profileSrc) {
+                Log "Using external profile file: $profileSrc" "INFO"
+                $profileContent = Get-Content $profileSrc -Raw -Encoding UTF8 -ErrorAction Stop
+            } else {
+                Log "External profile not found, using embedded fallback" "WARN"
+                $profileContent = $script:EmbeddedProfile
             }
-        } else {
-            Log "Source profile not found: $profileSrc" "ERROR"
+            
+            if (-not $profileContent -or $profileContent.Length -lt 100) {
+                throw "Profile content is empty or too small"
+            }
+            
+            # Write profile content
+            [System.IO.File]::WriteAllText($targetProfile, $profileContent, [System.Text.Encoding]::UTF8)
+            
+            # Verify the creation was successful
+            if ((Test-Path $targetProfile) -and (Get-Content $targetProfile -Raw -ErrorAction SilentlyContinue)) {
+                Log "Profile created for $targetName successfully" "OK"
+            } else {
+                throw "Profile creation verification failed"
+            }
+        } catch {
+            Log "Failed to create profile for $targetName - $($_.Exception.Message)" "ERROR"
             continue
         }
         
-        # Copy theme file
-        $themeSrc = "$PSScriptRoot\oh-my-posh-default.json"
+        # Create theme file
         $themeDst = "$targetPath\oh-my-posh-default.json"
-        if (Test-Path $themeSrc) {
-            try {
-                Copy-Item $themeSrc $themeDst -Force -ErrorAction Stop
-                Log "Oh My Posh theme copied to $targetName" "OK"
-            } catch {
-                Log "Failed to copy theme to $targetName - $($_.Exception.Message)" "ERROR"
+        try {
+            # Use external theme file if available, otherwise use embedded
+            $themeContent = $null
+            $themeSrc = "$PSScriptRoot\oh-my-posh-default.json"
+            
+            if (Test-Path $themeSrc) {
+                Log "Using external theme file: $themeSrc" "INFO"
+                $themeContent = Get-Content $themeSrc -Raw -Encoding UTF8 -ErrorAction Stop
+            } else {
+                Log "External theme not found, using embedded theme" "INFO"
+                $themeContent = $script:EmbeddedTheme
             }
+            
+            [System.IO.File]::WriteAllText($themeDst, $themeContent, [System.Text.Encoding]::UTF8)
+            Log "Oh My Posh theme created for $targetName" "OK"
+        } catch {
+            Log "Failed to create theme for $targetName - $($_.Exception.Message)" "ERROR"
         }
         
         # Copy verification script
@@ -527,8 +951,11 @@ try {
     
     Log "Profile installation completed successfully!" "OK"
     
-    # Final verification
+    # Final verification using integrated verification functions
     Log "Verifying installation..." "STEP"
+    $verificationResult = Test-InstallationVerification -ProfileDirs $allProfileDirs
+    Test-ThemeVerification | Out-Null  # Run theme verification but don't exit on failure
+    
     $successCount = 0
     $totalDirs = $allProfileDirs.Count
     

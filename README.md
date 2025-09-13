@@ -1,4 +1,6 @@
-# PowerShell Enhanced Profile
+# Po## Quick Start
+
+**🚀 Ultra-fast installation (downloads from GitHub):**ell Enhanced Profile
 
 A streamlined PowerShell profile with Linux-like aliases, system monitoring, and enhanced prompt that works seamlessly across both PowerShell 5.1 and PowerShell Core 7+.
 
@@ -19,7 +21,7 @@ quick-setup.bat
 
 **🧪 Test compatibility first:**
 ```powershell
-.\test-compatibility.ps1
+.\quick-install.ps1 -TestCompatibility
 ```
 
 ## ✨ Key Features
@@ -111,6 +113,44 @@ Get-PoshThemes
 oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\[theme-name].omp.json" | Invoke-Expression
 
 # To make permanent changes, edit the profile or replace oh-my-posh-default.json
+```
+
+## 📋 System Compatibility
+
+### Minimum Requirements
+- **OS**: Windows 10 (Build 1903) or Windows 11
+- **PowerShell**: PowerShell 5.1 (Windows PowerShell) OR PowerShell 7+ (PowerShell Core)
+- **Memory**: 2 GB RAM minimum
+- **Disk Space**: 100 MB free space
+- **Internet**: Required for initial installation and tool downloads
+
+### Supported Configurations
+- ✅ **PowerShell 7.0+** (Recommended - PowerShell Core)
+- ✅ **PowerShell 5.1** (Windows PowerShell - Built into Windows)
+- ✅ **Windows 11** (All editions)
+- ✅ **Windows 10** (Version 1903 and later)
+- ✅ **Windows Server 2019/2022**
+- ⚠️ **Windows Server 2016** (Limited support)
+
+### Documents Folder Detection
+The installation automatically detects Documents folders in this priority order:
+1. **OneDrive Personal**: `%OneDrive%\Documents` (with localization support)
+2. **OneDrive Business**: `%OneDriveCommercial%\Documents`
+3. **System Documents**: `[Environment]::GetFolderPath("MyDocuments")`
+4. **Fallback**: `%USERPROFILE%\Documents`
+
+### Installation Verification
+You can test compatibility and verify installations:
+
+```powershell
+# Test system compatibility
+.\quick-install.ps1 -TestCompatibility
+
+# Verify existing installation
+.\quick-install.ps1 -VerifyInstallation
+
+# Verify theme installation
+.\quick-install.ps1 -VerifyTheme
 ```
 
 ## Troubleshooting
