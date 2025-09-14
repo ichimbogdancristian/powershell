@@ -60,12 +60,15 @@ set /p PROFILE_CHOICE="Enter your choice (1-6): "
 
 if "%PROFILE_CHOICE%"=="1" (
     if exist "%PS_PROFILE%" (
+        rem generate timestamp using PowerShell to avoid locale issues
+        for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"`) do set TIMESTAMP=%%T
+        set "BACKUP_FILE=%PROFILE_DIR%%PROFILE_NAME%.%TIMESTAMP%.backup"
         echo [INFO] Backing up profile:
         echo   Source: %PS_PROFILE%
-        echo   Dest:   %BACKUP_PROFILE%
-        copy "%PS_PROFILE%" "%BACKUP_PROFILE%" /Y >nul
+        echo   Dest:   %BACKUP_FILE%
+        copy "%PS_PROFILE%" "%BACKUP_FILE%" /Y >nul
         if %errorlevel% equ 0 (
-            echo [OK] Profile backed up to: %BACKUP_PROFILE%
+            echo [OK] Profile backed up to: %BACKUP_FILE%
         ) else (
             echo [ERROR] Failed to copy profile to backup location.
         )
@@ -76,22 +79,29 @@ if "%PROFILE_CHOICE%"=="1" (
     goto profile_menu
 )
 if "%PROFILE_CHOICE%"=="2" (
-    if exist "%BACKUP_PROFILE%" (
-        echo [INFO] Restoring profile from backup:
-        echo   Source: %BACKUP_PROFILE%
+    rem attempt to restore the newest matching backup (by modified date)
+    set "LATEST="
+    for /f "usebackq delims=" %%F in (`dir "%PROFILE_DIR%%PROFILE_NAME%*.backup" /b /o:-d 2^>nul`) do (
+        set "LATEST=%%~fF"
+        goto have_latest
+    )
+    :have_latest
+    if defined LATEST (
+        echo [INFO] Restoring newest backup:
+        echo   Source: %LATEST%
         echo   Dest:   %PS_PROFILE%
         if not exist "%PS_PROFILE_DIR%" (
             echo [INFO] Creating profile directory: %PS_PROFILE_DIR%
             mkdir "%PS_PROFILE_DIR%" >nul 2>nul
         )
-        copy "%BACKUP_PROFILE%" "%PS_PROFILE%" /Y >nul
+        copy "%LATEST%" "%PS_PROFILE%" /Y >nul
         if %errorlevel% equ 0 (
-            echo [OK] Profile restored from backup.
+            echo [OK] Profile restored from: %LATEST%
         ) else (
-            echo [ERROR] Failed to restore profile from backup.
+            echo [ERROR] Failed to restore profile from: %LATEST%
         )
     ) else (
-        echo [ERROR] No backup found at: %BACKUP_PROFILE%
+        echo [ERROR] No backups found matching: %PROFILE_DIR%%PROFILE_NAME%*.backup
     )
     echo.
     goto profile_menu
@@ -134,42 +144,85 @@ if "%PROFILE_CHOICE%"=="6" (
         call echo %%I. %%BK%%I%%
     )
     echo.
-    set /p DEL_CHOICE="Enter number to delete, 'a' to delete all, or press Enter to return: "
-    if "%DEL_CHOICE%"=="" (
+    set /p ACTION="Enter 'd' to delete, 'r' to restore, 'a' to delete all, or press Enter to return: "
+    if "%ACTION%"=="" (
         echo.
         goto profile_menu
     )
-    if /i "%DEL_CHOICE%"=="a" (
+    if /i "%ACTION%"=="a" (
         set /p CONFIRM="Are you sure you want to delete ALL backups? (y/n): "
         if /i "%CONFIRM%"=="y" (
+            rem move all to DeletedBackups folder
+            set "DELETED_DIR=%PROFILE_DIR%DeletedBackups\"
+            if not exist "%DELETED_DIR%" mkdir "%DELETED_DIR%" >nul 2>nul
             for /L %%I in (1,1,%BK_COUNT%) do (
-                call del /f /q "%%BK%%I%%" 2>nul
+                call move "%%BK%%I%%" "%DELETED_DIR%" >nul 2>nul
             )
-            echo [OK] Deleted %BK_COUNT% backups.
+            echo [OK] Moved %BK_COUNT% backups to: %DELETED_DIR%
         ) else (
             echo [INFO] Cancelled.
         )
         echo.
         goto profile_menu
     )
-    rem Delete a single backup by number
-    call set "TARGET=%%BK%DEL_CHOICE%%%"
-    if "%TARGET%"=="" (
-        echo [ERROR] Invalid selection.
+    if /i "%ACTION%"=="d" (
+        set /p DEL_CHOICE="Enter number to delete, or press Enter to cancel: "
+        if "%DEL_CHOICE%"=="" (
+            echo [INFO] Cancelled.
+            echo.
+            goto profile_menu
+        )
+        call set "TARGET=%%BK%DEL_CHOICE%%%"
+        if "%TARGET%"=="" (
+            echo [ERROR] Invalid selection.
+            echo.
+            goto profile_menu
+        )
+        set "DELETED_DIR=%PROFILE_DIR%DeletedBackups\"
+        if not exist "%DELETED_DIR%" mkdir "%DELETED_DIR%" >nul 2>nul
+        set /p CONFIRM="Are you sure you want to move '%TARGET%' to DeletedBackups? (y/n): "
+        if /i "%CONFIRM%"=="y" (
+            move "%TARGET%" "%DELETED_DIR%" >nul 2>nul
+            if %errorlevel% equ 0 (
+                echo [OK] Moved to: %DELETED_DIR%
+            ) else (
+                echo [ERROR] Failed to move: %TARGET%
+            )
+        ) else (
+            echo [INFO] Cancelled.
+        )
         echo.
         goto profile_menu
     )
-    set /p CONFIRM="Are you sure you want to delete '%TARGET%'? (y/n): "
-    if /i "%CONFIRM%"=="y" (
-        del /f /q "%TARGET%" 2>nul
-        if %errorlevel% equ 0 (
-            echo [OK] Deleted: %TARGET%
-        ) else (
-            echo [ERROR] Failed to delete: %TARGET%
+    if /i "%ACTION%"=="r" (
+        set /p REST_CHOICE="Enter number to restore, or press Enter to cancel: "
+        if "%REST_CHOICE%"=="" (
+            echo [INFO] Cancelled.
+            echo.
+            goto profile_menu
         )
-    ) else (
-        echo [INFO] Cancelled.
+        call set "TARGET=%%BK%REST_CHOICE%%%"
+        if "%TARGET%"=="" (
+            echo [ERROR] Invalid selection.
+            echo.
+            goto profile_menu
+        )
+        set /p CONFIRM="Are you sure you want to restore '%TARGET%' to %PS_PROFILE%? (y/n): "
+        if /i "%CONFIRM%"=="y" (
+            if not exist "%PS_PROFILE_DIR%" mkdir "%PS_PROFILE_DIR%" >nul 2>nul
+            copy "%TARGET%" "%PS_PROFILE%" /Y >nul
+            if %errorlevel% equ 0 (
+                echo [OK] Restored profile from: %TARGET%
+            ) else (
+                echo [ERROR] Failed to restore from: %TARGET%
+            )
+        ) else (
+            echo [INFO] Cancelled.
+        )
+        echo.
+        goto profile_menu
     )
+    echo [ERROR] Unknown action.
     echo.
     goto profile_menu
 )
