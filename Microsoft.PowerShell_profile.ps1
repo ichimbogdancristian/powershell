@@ -29,28 +29,34 @@ if ($psReadLineModule) {
             # Use different prediction styles based on environment
             if ($env:TERM_PROGRAM -eq "vscode") {
                 Set-PSReadLineOption -PredictionViewStyle InlineView  # Less intrusive in VS Code
-            } else {
+            }
+            else {
                 Set-PSReadLineOption -PredictionViewStyle ListView  # Full list view in regular PowerShell
             }
-        } catch {
+        }
+        catch {
             Write-Warning "Some PSReadLine prediction features are not available in this version."
         }
-    } else {
+    }
+    else {
         # For older PSReadLine versions, just enable basic history search
         try {
             Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
             Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-        } catch { }
+        }
+        catch { }
     }
     
     # These options should be available in most PSReadLine versions
     try {
         if ($env:TERM_PROGRAM -eq "vscode") {
             Set-PSReadLineOption -CompletionQueryItems 50  # Reduced for better performance
-        } else {
+        }
+        else {
             Set-PSReadLineOption -CompletionQueryItems 100
         }
-    } catch { }
+    }
+    catch { }
 }
 Set-PSReadLineOption -EditMode Windows
 
@@ -58,27 +64,29 @@ Set-PSReadLineOption -EditMode Windows
 try {
     Set-PSReadLineOption -MaximumHistoryCount 4000
     Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-} catch { }
+}
+catch { }
 
 # Colors for different types of input (with error handling)
 try {
     Set-PSReadLineOption -Colors @{
-        Command            = 'Cyan'
-        Parameter          = 'Gray'
-        Operator           = 'White'
-        Variable           = 'Green'
-        String             = 'Yellow'
-        Number             = 'Red'
-        Type               = 'DarkCyan'
-        Comment            = 'DarkGreen'
-        Keyword            = 'Blue'
-        Error              = 'DarkRed'
-        Selection          = 'DarkBlue'
-        InlinePrediction   = 'DarkGray'
-        ListPrediction     = 'DarkYellow'
+        Command                = 'Cyan'
+        Parameter              = 'Gray'
+        Operator               = 'White'
+        Variable               = 'Green'
+        String                 = 'Yellow'
+        Number                 = 'Red'
+        Type                   = 'DarkCyan'
+        Comment                = 'DarkGreen'
+        Keyword                = 'Blue'
+        Error                  = 'DarkRed'
+        Selection              = 'DarkBlue'
+        InlinePrediction       = 'DarkGray'
+        ListPrediction         = 'DarkYellow'
         ListPredictionSelected = 'DarkGreen'
     }
-} catch {
+}
+catch {
     # Fallback for older PSReadLine versions
     try {
         Set-PSReadLineOption -Colors @{
@@ -93,7 +101,8 @@ try {
             Keyword   = 'Blue'
             Error     = 'DarkRed'
         }
-    } catch { }
+    }
+    catch { }
 }
 
 # Key bindings for enhanced navigation
@@ -150,11 +159,13 @@ foreach ($location in $themeLocations) {
 if (-not (Get-Command oh-my-posh -ErrorAction SilentlyContinue)) {
     Write-Warning "Oh My Posh is not installed. Install it with: winget install JanDeDobbeleer.OhMyPosh"
     Write-Host "Or visit: https://ohmyposh.dev/docs/installation/windows" -ForegroundColor Yellow
-} elseif ($ohMyPoshTheme) {
+}
+elseif ($ohMyPoshTheme) {
     try {
         oh-my-posh init pwsh --config $ohMyPoshTheme | Invoke-Expression
         Write-Verbose "Oh My Posh initialized with custom theme: $ohMyPoshTheme"
-    } catch {
+    }
+    catch {
         Write-Warning "Failed to load custom Oh My Posh theme: $($_.Exception.Message)"
         # Fallback to built-in theme
         try {
@@ -162,20 +173,24 @@ if (-not (Get-Command oh-my-posh -ErrorAction SilentlyContinue)) {
                 oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
                 Write-Host "Using fallback Oh My Posh theme" -ForegroundColor Yellow
             }
-        } catch {
+        }
+        catch {
             Write-Warning "Could not initialize any Oh My Posh theme"
         }
     }
-} else {
+}
+else {
     # Try to use a built-in theme if available
     try {
         if ($env:POSH_THEMES_PATH -and (Test-Path "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json")) {
             oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression
             Write-Host "Oh My Posh initialized with built-in theme (custom theme not found)" -ForegroundColor Yellow
-        } else {
+        }
+        else {
             Write-Warning "No Oh My Posh themes found. Theme file should be at: $profileDir\oh-my-posh-default.json"
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Could not initialize Oh My Posh. Please check installation."
     }
 }
@@ -187,9 +202,9 @@ if (-not (Get-Command oh-my-posh -ErrorAction SilentlyContinue)) {
 # Initialize zoxide
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
     Invoke-Expression (& {
-        $hook = if ($PSVersionTable.PSVersion.Major -lt 6) { 'prompt' } else { 'pwd' }
-        (zoxide init --hook $hook powershell) -join "`n"
-    })
+            $hook = if ($PSVersionTable.PSVersion.Major -lt 6) { 'prompt' } else { 'pwd' }
+            (zoxide init --hook $hook powershell) -join "`n"
+        })
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -270,7 +285,8 @@ function Get-ChildItemDetailed {
         Name = 'Length'; Expression = { 
             if ($_.PSIsContainer) { 
                 '<DIR>' 
-            } else { 
+            }
+            else { 
                 Format-FileSize $_.Length 
             }
         }
@@ -278,7 +294,8 @@ function Get-ChildItemDetailed {
         Name = 'Name'; Expression = { 
             if ($_.PSIsContainer) { 
                 "$($_.Name)/" 
-            } else { 
+            }
+            else { 
                 $_.Name 
             }
         }
@@ -309,10 +326,12 @@ function Set-LocationWithHistory {
     if ($Path -eq "-") {
         if ($global:LastLocation) {
             Set-Location $global:LastLocation
-        } else {
+        }
+        else {
             Write-Host "No previous location recorded" -ForegroundColor Yellow
         }
-    } else {
+    }
+    else {
         $global:LastLocation = Get-Location
         Set-Location $Path
     }
@@ -434,9 +453,9 @@ function Test-SystemHealth {
     $disks = Get-CimInstance -ClassName Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
     
     $health = @{
-        CPU = $cpu.LoadPercentage
+        CPU    = $cpu.LoadPercentage
         Memory = [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100, 2)
-        Disk = [math]::Round((($disks | Measure-Object -Property Size -Sum).Sum - ($disks | Measure-Object -Property FreeSpace -Sum).Sum) / ($disks | Measure-Object -Property Size -Sum).Sum * 100, 2)
+        Disk   = [math]::Round((($disks | Measure-Object -Property Size -Sum).Sum - ($disks | Measure-Object -Property FreeSpace -Sum).Sum) / ($disks | Measure-Object -Property Size -Sum).Sum * 100, 2)
     }
     
     # Return health status with colors
@@ -445,9 +464,9 @@ function Test-SystemHealth {
     $diskColor = if ($health.Disk -gt 80) { 'Red' } elseif ($health.Disk -gt 60) { 'Yellow' } else { 'Green' }
     
     return @{
-        CPU = @{ Value = $health.CPU; Color = $cpuColor }
+        CPU    = @{ Value = $health.CPU; Color = $cpuColor }
         Memory = @{ Value = $health.Memory; Color = $memColor }
-        Disk = @{ Value = $health.Disk; Color = $diskColor }
+        Disk   = @{ Value = $health.Disk; Color = $diskColor }
     }
 }
 
@@ -469,9 +488,11 @@ function Get-SystemHealth {
     $overallHealth = ($health.CPU.Value + $health.Memory.Value + $health.Disk.Value) / 3
     if ($overallHealth -lt 60) {
         Write-Host "Excellent ✓" -ForegroundColor Green
-    } elseif ($overallHealth -lt 80) {
+    }
+    elseif ($overallHealth -lt 80) {
         Write-Host "Good ⚠" -ForegroundColor Yellow
-    } else {
+    }
+    else {
         Write-Host "Critical ✗" -ForegroundColor Red
     }
     
@@ -538,7 +559,8 @@ if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
             Write-Host "Copied to clipboard!" -ForegroundColor Green
         }
     }
-} else {
+}
+else {
     function Copy-ToClipboard {
         Write-Host "Set-Clipboard is not available. Please update PowerShell or install the required module." -ForegroundColor Yellow
     }
@@ -551,7 +573,8 @@ if (Get-Command Get-Clipboard -ErrorAction SilentlyContinue) {
         Write-Host $clip
         return $clip
     }
-} else {
+}
+else {
     function Get-FromClipboard {
         Write-Host "Get-Clipboard is not available. Please update PowerShell or install the required module." -ForegroundColor Yellow
         return $null
@@ -574,7 +597,8 @@ if (Get-Command Out-GridView -ErrorAction SilentlyContinue) {
             Invoke-Expression $selected
         }
     }
-} elseif (Get-Command fzf -ErrorAction SilentlyContinue) {
+}
+elseif (Get-Command fzf -ErrorAction SilentlyContinue) {
     function Search-History {
         $selected = Get-History | Sort-Object Id -Descending | Select-Object -ExpandProperty CommandLine | fzf --prompt="History> "
         if ($selected) {
@@ -582,7 +606,8 @@ if (Get-Command Out-GridView -ErrorAction SilentlyContinue) {
             Invoke-Expression $selected
         }
     }
-} else {
+}
+else {
     function Search-History {
         Get-History | Sort-Object Id -Descending | Select-Object -First 20 | Format-Table Id, CommandLine
         Write-Host "Install 'Out-GridView' (Windows) or 'fzf' (cross-platform) for interactive history search." -ForegroundColor Yellow
@@ -615,7 +640,8 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
                 git stash apply $stashId
             }
         }
-    } else {
+    }
+    else {
         function gcof {
             Write-Host "fzf not found. Please install fzf for interactive branch checkout." -ForegroundColor Yellow
         }
@@ -623,7 +649,8 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
             Write-Host "fzf not found. Please install fzf for interactive stash apply." -ForegroundColor Yellow
         }
     }
-} else {
+}
+else {
     function gitlg {
         Write-Host "Git is not installed or not in PATH." -ForegroundColor Yellow
     }
@@ -681,7 +708,8 @@ function Show-WelcomeMessage {
         Write-Host ""
         Write-Host "Commands: ll, neofetch, health, c (code), settings | help-profile for more" -ForegroundColor DarkGray
         Write-Host ""
-    } else {
+    }
+    else {
         # Show full welcome message for regular PowerShell
         Write-Host ""
         Write-Host "╭─────────────────────────────────────────────────────────╮" -ForegroundColor Magenta
@@ -784,7 +812,7 @@ function Search-Content {
     
     $params = @{
         Pattern = $Pattern
-        Path = $Path
+        Path    = $Path
     }
     
     if ($Recursive) {
@@ -809,7 +837,8 @@ function Get-Size {
         $size = (Get-ChildItem -Path $Path -Recurse | Measure-Object -Property Length -Sum).Sum
         Write-Host "Directory: $Path" -ForegroundColor Cyan
         Write-Host "Size: $(Format-FileSize $size)" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "File: $Path" -ForegroundColor Cyan  
         Write-Host "Size: $(Format-FileSize $item.Length)" -ForegroundColor Green
     }
@@ -825,7 +854,8 @@ function Expand-ArchiveFile {
     try {
         Expand-Archive -Path $Path -DestinationPath $Destination -Force
         Write-Host "Extracted $Path to $Destination" -ForegroundColor Green
-    } catch {
+    }
+    catch {
         Write-Host "Failed to extract: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
@@ -840,7 +870,8 @@ function Start-HttpServer {
         Write-Host "Starting HTTP server on port $Port..." -ForegroundColor Green
         Write-Host "Access at: http://localhost:$Port" -ForegroundColor Cyan
         python -m http.server $Port
-    } else {
+    }
+    else {
         Write-Host "Python not found. Install Python to use this feature." -ForegroundColor Red
     }
 }
@@ -854,7 +885,8 @@ function Get-Weather {
     try {
         $response = Invoke-RestMethod -Uri "https://wttr.in/$City?format=3"
         Write-Host $response -ForegroundColor Cyan
-    } catch {
+    }
+    catch {
         Write-Host "Unable to fetch weather data" -ForegroundColor Red
     }
 }
@@ -879,10 +911,12 @@ function Get-GitStatus {
             Write-Host "$branch" -ForegroundColor Yellow
             Write-Host ""
             git status --short
-        } else {
+        }
+        else {
             Write-Host "Not in a git repository" -ForegroundColor Red
         }
-    } else {
+    }
+    else {
         Write-Host "Git not found" -ForegroundColor Red
     }
 }
@@ -917,7 +951,8 @@ function Invoke-BookmarkNavigation {
     if ($global:DirectoryBookmarks.ContainsKey($Name)) {
         Set-Location $global:DirectoryBookmarks[$Name]
         Write-Host "Navigated to bookmark '$Name'" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "Bookmark '$Name' not found" -ForegroundColor Red
     }
 }
@@ -926,7 +961,8 @@ function Invoke-BookmarkNavigation {
 function Get-Bookmarks {
     if ($global:DirectoryBookmarks.Count -eq 0) {
         Write-Host "No bookmarks saved" -ForegroundColor Yellow
-    } else {
+    }
+    else {
         Write-Host "Saved Bookmarks:" -ForegroundColor Cyan
         $global:DirectoryBookmarks.GetEnumerator() | ForEach-Object {
             Write-Host "  $($_.Key): $($_.Value)" -ForegroundColor White
@@ -943,7 +979,8 @@ function Remove-Bookmark {
     if ($global:DirectoryBookmarks.ContainsKey($Name)) {
         $global:DirectoryBookmarks.Remove($Name)
         Write-Host "Bookmark '$Name' removed" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "Bookmark '$Name' not found" -ForegroundColor Red
     }
 }
@@ -973,21 +1010,23 @@ function Find-File {
     )
     
     $searchParams = @{
-        Path = $Path
+        Path    = $Path
         Recurse = $true
-        File = $true
+        File    = $true
     }
     
     if ($CaseSensitive) {
         $filter = "*$Name*"
-    } else {
+    }
+    else {
         $filter = "*$Name*"
     }
     
     Get-ChildItem @searchParams | Where-Object { 
         if ($CaseSensitive) {
             $_.Name -like $filter
-        } else {
+        }
+        else {
             $_.Name -ilike $filter
         }
     } | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
@@ -1064,7 +1103,8 @@ function Get-ChildItemColorized {
     # Get items with optional hidden files
     if ($ShowHidden) {
         $items = Get-ChildItem -Path $Path -Force
-    } else {
+    }
+    else {
         $items = Get-ChildItem -Path $Path
     }
     
@@ -1086,15 +1126,15 @@ function Get-ChildItemColorized {
         }
         
         switch ($Extension.ToLower()) {
-            {$_ -in '.exe', '.msi', '.bat', '.cmd', '.ps1', '.sh'} { return "Green" }
-            {$_ -in '.txt', '.md', '.readme', '.log'} { return "White" }
-            {$_ -in '.json', '.xml', '.yaml', '.yml', '.config'} { return "Yellow" }
-            {$_ -in '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico'} { return "Magenta" }
-            {$_ -in '.mp3', '.wav', '.mp4', '.avi', '.mkv', '.mov'} { return "DarkMagenta" }
-            {$_ -in '.zip', '.rar', '.7z', '.tar', '.gz'} { return "Red" }
-            {$_ -in '.cs', '.js', '.ts', '.py', '.cpp', '.h', '.css', '.html'} { return "Cyan" }
-            {$_ -in '.dll', '.lib', '.so'} { return "DarkRed" }
-            {$_ -in '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'} { return "DarkYellow" }
+            { $_ -in '.exe', '.msi', '.bat', '.cmd', '.ps1', '.sh' } { return "Green" }
+            { $_ -in '.txt', '.md', '.readme', '.log' } { return "White" }
+            { $_ -in '.json', '.xml', '.yaml', '.yml', '.config' } { return "Yellow" }
+            { $_ -in '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico' } { return "Magenta" }
+            { $_ -in '.mp3', '.wav', '.mp4', '.avi', '.mkv', '.mov' } { return "DarkMagenta" }
+            { $_ -in '.zip', '.rar', '.7z', '.tar', '.gz' } { return "Red" }
+            { $_ -in '.cs', '.js', '.ts', '.py', '.cpp', '.h', '.css', '.html' } { return "Cyan" }
+            { $_ -in '.dll', '.lib', '.so' } { return "DarkRed" }
+            { $_ -in '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx' } { return "DarkYellow" }
             default { return "Gray" }
         }
     }
@@ -1108,16 +1148,16 @@ function Get-ChildItemColorized {
         }
         
         switch ($Extension.ToLower()) {
-            {$_ -in '.exe', '.msi'} { return "⚙️" }
-            {$_ -in '.bat', '.cmd', '.ps1', '.sh'} { return "📜" }
-            {$_ -in '.txt', '.md', '.readme', '.log'} { return "📄" }
-            {$_ -in '.json', '.xml', '.yaml', '.yml', '.config'} { return "🔧" }
-            {$_ -in '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico'} { return "🖼️" }
-            {$_ -in '.mp3', '.wav', '.mp4', '.avi', '.mkv', '.mov'} { return "🎵" }
-            {$_ -in '.zip', '.rar', '.7z', '.tar', '.gz'} { return "📦" }
-            {$_ -in '.cs', '.js', '.ts', '.py', '.cpp', '.h', '.css', '.html'} { return "💻" }
-            {$_ -in '.dll', '.lib', '.so'} { return "🔗" }
-            {$_ -in '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'} { return "📋" }
+            { $_ -in '.exe', '.msi' } { return "⚙️" }
+            { $_ -in '.bat', '.cmd', '.ps1', '.sh' } { return "📜" }
+            { $_ -in '.txt', '.md', '.readme', '.log' } { return "📄" }
+            { $_ -in '.json', '.xml', '.yaml', '.yml', '.config' } { return "🔧" }
+            { $_ -in '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico' } { return "🖼️" }
+            { $_ -in '.mp3', '.wav', '.mp4', '.avi', '.mkv', '.mov' } { return "🎵" }
+            { $_ -in '.zip', '.rar', '.7z', '.tar', '.gz' } { return "📦" }
+            { $_ -in '.cs', '.js', '.ts', '.py', '.cpp', '.h', '.css', '.html' } { return "💻" }
+            { $_ -in '.dll', '.lib', '.so' } { return "🔗" }
+            { $_ -in '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx' } { return "📋" }
             default { return "📄" }
         }
     }
@@ -1150,12 +1190,12 @@ function Get-ChildItemColorized {
         $symbol = Get-FileSymbol -Extension "" -IsDirectory $true
         
         $tableData += [PSCustomObject]@{
-            Symbol = $symbol
-            Type = "DIR"
-            Name = $dir.Name
-            Size = "<DIR>"
-            Modified = $dir.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
-            Color = $color
+            Symbol      = $symbol
+            Type        = "DIR"
+            Name        = $dir.Name
+            Size        = "<DIR>"
+            Modified    = $dir.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+            Color       = $color
             IsDirectory = $true
         }
     }
@@ -1166,12 +1206,12 @@ function Get-ChildItemColorized {
         $symbol = Get-FileSymbol -Extension $file.Extension -IsDirectory $false
         
         $tableData += [PSCustomObject]@{
-            Symbol = $symbol
-            Type = $file.Extension.ToUpper().TrimStart('.')
-            Name = $file.Name
-            Size = Format-FileSize $file.Length
-            Modified = $file.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
-            Color = $color
+            Symbol      = $symbol
+            Type        = $file.Extension.ToUpper().TrimStart('.')
+            Name        = $file.Name
+            Size        = Format-FileSize $file.Length
+            Modified    = $file.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+            Color       = $color
             IsDirectory = $false
         }
     }
@@ -1188,13 +1228,14 @@ function Get-ChildItemColorized {
         # Type column (6 chars)
         if ($item.IsDirectory) {
             Write-Host " DIR " -NoNewline -ForegroundColor White -BackgroundColor Blue
-        } else {
-            Write-Host (" " + $item.Type).PadRight(5).Substring(0,5) -NoNewline -ForegroundColor Black -BackgroundColor Gray
+        }
+        else {
+            Write-Host (" " + $item.Type).PadRight(5).Substring(0, 5) -NoNewline -ForegroundColor Black -BackgroundColor Gray
         }
         Write-Host " " -NoNewline
         
         # Name column (35 chars) with color coding
-        $displayName = if ($item.Name.Length -gt 34) { $item.Name.Substring(0,31) + "..." } else { $item.Name }
+        $displayName = if ($item.Name.Length -gt 34) { $item.Name.Substring(0, 31) + "..." } else { $item.Name }
         Write-Host $displayName.PadRight(35) -NoNewline -ForegroundColor $item.Color
         
         # Size column (12 chars)
