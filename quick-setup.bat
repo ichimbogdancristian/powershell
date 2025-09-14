@@ -8,6 +8,7 @@ echo █████████████████████████
 echo █          PowerShell Enhanced Profile - GitHub Install       █
 echo █                    Repository Download                      █
 echo ████████████████████████████████████████████████████████████████
+echo [QUESTION] Do you want to proceed with the PowerShell profile installation? (y/n)
 echo.
 
 REM Repository configuration
@@ -39,42 +40,90 @@ echo [INFO] PowerShell Core profile: %PS_PROFILE_DIR%\Microsoft.PowerShell_profi
 echo [INFO] Windows PowerShell profile: %WIN_PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
 echo.
 
-REM === Profile Management Options ===
+REM === Profile Management (interactive loop below) ===
+
+:profile_menu
 echo [PROFILE] Choose an option before continuing:
 echo   1. Backup current profile
 echo   2. Restore previous backup
 echo   3. Restore Microsoft default profile
-echo   4. Continue without changes
-set /p PROFILE_CHOICE="Enter your choice (1-4): "
+echo   4. Proceed to installation
+echo   5. Quit
+set /p PROFILE_CHOICE="Enter your choice (1-5): "
 
 if "%PROFILE_CHOICE%"=="1" (
     if exist "%PS_PROFILE%" (
+        echo [INFO] Backing up profile:
+        echo   Source: %PS_PROFILE%
+        echo   Dest:   %BACKUP_PROFILE%
         copy "%PS_PROFILE%" "%BACKUP_PROFILE%" /Y >nul
-        echo [OK] Profile backed up to: %BACKUP_PROFILE%
+        if %errorlevel% equ 0 (
+            echo [OK] Profile backed up to: %BACKUP_PROFILE%
+        ) else (
+            echo [ERROR] Failed to copy profile to backup location.
+        )
     ) else (
-        echo [INFO] No existing profile to backup.
+        echo [INFO] No existing profile to backup: %PS_PROFILE%
     )
     echo.
+    goto profile_menu
 )
 if "%PROFILE_CHOICE%"=="2" (
     if exist "%BACKUP_PROFILE%" (
+        echo [INFO] Restoring profile from backup:
+        echo   Source: %BACKUP_PROFILE%
+        echo   Dest:   %PS_PROFILE%
+        if not exist "%PS_PROFILE_DIR%" (
+            echo [INFO] Creating profile directory: %PS_PROFILE_DIR%
+            mkdir "%PS_PROFILE_DIR%" >nul 2>nul
+        )
         copy "%BACKUP_PROFILE%" "%PS_PROFILE%" /Y >nul
-        echo [OK] Profile restored from backup.
+        if %errorlevel% equ 0 (
+            echo [OK] Profile restored from backup.
+        ) else (
+            echo [ERROR] Failed to restore profile from backup.
+        )
     ) else (
         echo [ERROR] No backup found at: %BACKUP_PROFILE%
     )
     echo.
+    goto profile_menu
 )
 if "%PROFILE_CHOICE%"=="3" (
-    powershell -NoProfile -Command "Remove-Item -Path $PROFILE -ErrorAction SilentlyContinue; New-Item -Path $PROFILE -ItemType File -Force | Out-Null"
-    echo [OK] Microsoft default profile restored (empty profile).
+    echo [INFO] Restoring Microsoft default (empty) profile at: %PS_PROFILE%
+    if not exist "%PS_PROFILE_DIR%" (
+        echo [INFO] Creating profile directory: %PS_PROFILE_DIR%
+        mkdir "%PS_PROFILE_DIR%" >nul 2>nul
+    )
+    powershell -NoProfile -Command "try { Remove-Item -Path $PROFILE -ErrorAction SilentlyContinue } catch {}; New-Item -Path $PROFILE -ItemType File -Force | Out-Null; exit 0"
+    if %errorlevel% equ 0 (
+        echo [OK] Microsoft default profile restored (empty profile).
+    ) else (
+        echo [ERROR] Failed to create default profile file: %PS_PROFILE%
+    )
     echo.
+    goto profile_menu
+)
+if "%PROFILE_CHOICE%"=="5" (
+    echo [INFO] Installation cancelled by user.
+    goto :eof
 )
 if "%PROFILE_CHOICE%"=="4" (
-    echo [INFO] Continuing without profile changes.
+    echo [QUESTION] Are you sure you want to proceed to installation? (y/n)
+    set /p PROCEED_CONFIRM=
+    if /i "%PROCEED_CONFIRM%"=="y" (
+        echo [INFO] Proceeding to installation...
+        echo.
+    ) else (
+        echo [INFO] Returning to profile menu.
+        echo.
+        goto profile_menu
+    )
+) else (
+    echo [ERROR] Invalid choice. Please try again.
     echo.
+    goto profile_menu
 )
-
 REM === Dependency and Module Checks ===
 echo [CHECK] Checking for existing dependencies and modules...
 
