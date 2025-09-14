@@ -240,13 +240,17 @@ if "%PROFILE_CHOICE%"=="1" (
     if /i "%PROCEED_CONFIRM%"=="y" (
         echo [INFO] Proceeding to installation...
         echo.
+        echo [INFO] Press any key to begin installation. If you launched this by double-click, this prevents the window from closing immediately.
+        pause
+        goto do_install
     ) else (
         echo [INFO] Returning to profile menu.
         echo.
         goto profile_menu
     )
 )
-rem if we reach here, continue to dependency checks (installation flow)
+
+:do_install
 REM === Dependency and Module Checks ===
 echo [CHECK] Checking for existing dependencies and modules...
 
