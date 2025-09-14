@@ -27,6 +27,98 @@ echo [INFO] OS: %OS%
 ver | findstr /C:"Version"
 echo.
 
+REM === Profile Location Detection ===
+echo [PROFILE] Detecting PowerShell profile locations...
+for /f "delims=" %%p in ('powershell -NoProfile -Command "$PROFILE"') do set "PS_PROFILE=%%p"
+set "PS_PROFILE_DIR=%USERPROFILE%\Documents\PowerShell"
+set "WIN_PS_PROFILE_DIR=%USERPROFILE%\Documents\WindowsPowerShell"
+set "BACKUP_PROFILE=%PS_PROFILE%.backup"
+set "DEFAULT_PROFILE=%TEMP%\Microsoft.PowerShell_profile_default.ps1"
+
+echo [INFO] PowerShell Core profile: %PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
+echo [INFO] Windows PowerShell profile: %WIN_PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
+echo.
+
+REM === Profile Management Options ===
+echo [PROFILE] Choose an option before continuing:
+echo   1. Backup current profile
+echo   2. Restore previous backup
+echo   3. Restore Microsoft default profile
+echo   4. Continue without changes
+set /p PROFILE_CHOICE="Enter your choice (1-4): "
+
+if "%PROFILE_CHOICE%"=="1" (
+    if exist "%PS_PROFILE%" (
+        copy "%PS_PROFILE%" "%BACKUP_PROFILE%" /Y >nul
+        echo [OK] Profile backed up to: %BACKUP_PROFILE%
+    ) else (
+        echo [INFO] No existing profile to backup.
+    )
+    echo.
+)
+if "%PROFILE_CHOICE%"=="2" (
+    if exist "%BACKUP_PROFILE%" (
+        copy "%BACKUP_PROFILE%" "%PS_PROFILE%" /Y >nul
+        echo [OK] Profile restored from backup.
+    ) else (
+        echo [ERROR] No backup found at: %BACKUP_PROFILE%
+    )
+    echo.
+)
+if "%PROFILE_CHOICE%"=="3" (
+    powershell -NoProfile -Command "Remove-Item -Path $PROFILE -ErrorAction SilentlyContinue; New-Item -Path $PROFILE -ItemType File -Force | Out-Null"
+    echo [OK] Microsoft default profile restored (empty profile).
+    echo.
+)
+if "%PROFILE_CHOICE%"=="4" (
+    echo [INFO] Continuing without profile changes.
+    echo.
+)
+
+REM === Dependency and Module Checks ===
+echo [CHECK] Checking for existing dependencies and modules...
+
+REM Check PowerShell modules
+set "MODULES_OK=1"
+powershell -Command "try { Get-Module posh-git -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] posh-git module found' -ForegroundColor Green } catch { Write-Host '[INFO] posh-git module not found' -ForegroundColor Yellow; $global:MODULES_OK=0 }"
+powershell -Command "try { Get-Module Terminal-Icons -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] Terminal-Icons module found' -ForegroundColor Green } catch { Write-Host '[INFO] Terminal-Icons module not found' -ForegroundColor Yellow; $global:MODULES_OK=0 }"
+powershell -Command "try { Get-Module PSReadLine -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] PSReadLine module found' -ForegroundColor Green } catch { Write-Host '[INFO] PSReadLine module not found' -ForegroundColor Yellow; $global:MODULES_OK=0 }"
+
+REM Check tools
+set "TOOLS_OK=1"
+where oh-my-posh >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [OK] oh-my-posh tool found
+) else (
+    echo [INFO] oh-my-posh tool not found
+    set "TOOLS_OK=0"
+)
+where git >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [OK] git tool found
+) else (
+    echo [INFO] git tool not found
+    set "TOOLS_OK=0"
+)
+where zoxide >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [OK] zoxide tool found
+) else (
+    echo [INFO] zoxide tool not found
+    set "TOOLS_OK=0"
+)
+
+if %MODULES_OK% equ 1 if %TOOLS_OK% equ 1 (
+    echo [INFO] All dependencies and modules are already installed.
+    echo [QUESTION] Do you want to skip installation and just update the profile? (y/n)
+    set /p SKIP_CHOICE=
+    if /i "%SKIP_CHOICE%"=="y" (
+        set "SKIP_INSTALL=1"
+        goto :skip_install
+    )
+)
+echo.
+
 REM Check dependencies
 echo [CHECK] Verifying system dependencies...
 
@@ -104,6 +196,7 @@ if not exist "%EXTRACT_DIR%" (
 echo [OK] Repository extracted to temporary location
 echo.
 
+:skip_install
 echo [INSTALL] Starting PowerShell profile installation...
 echo [INFO] Running installation script from downloaded repository...
 
@@ -122,9 +215,27 @@ echo ═════════════════════════
 
 REM Run installation script with visible output
 cd /d "%EXTRACT_DIR%"
-echo [INFO] Running installation with complete directory clearing (no backups)...
-powershell -ExecutionPolicy Bypass -Command "& '.\quick-install.ps1' -CleanInstall; if ($LASTEXITCODE -ne 0) { exit 1 }"
-set "INSTALL_RESULT=%errorlevel%"
+if "%SKIP_INSTALL%"=="1" (
+    echo [INFO] Skipping full installation, updating profile only...
+    REM Copy profile files to both locations
+    if not exist "%PS_PROFILE_DIR%" mkdir "%PS_PROFILE_DIR%"
+    copy "Microsoft.PowerShell_profile.ps1" "%PS_PROFILE_DIR%\" /Y >nul
+    copy "oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y >nul
+    if not exist "%WIN_PS_PROFILE_DIR%" mkdir "%WIN_PS_PROFILE_DIR%"
+    copy "Microsoft.PowerShell_profile.ps1" "%WIN_PS_PROFILE_DIR%\" /Y >nul
+    copy "oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y >nul
+    REM Copy modules if needed
+    if not exist "%PS_PROFILE_DIR%\Modules" mkdir "%PS_PROFILE_DIR%\Modules"
+    xcopy "Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y >nul
+    if not exist "%WIN_PS_PROFILE_DIR%\Modules" mkdir "%WIN_PS_PROFILE_DIR%\Modules"
+    xcopy "Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y >nul
+    echo [OK] Profile updated successfully
+    set "INSTALL_RESULT=0"
+) else (
+    echo [INFO] Running installation with complete directory clearing (no backups)...
+    powershell -ExecutionPolicy Bypass -Command "& '.\quick-install.ps1' -CleanInstall; if ($LASTEXITCODE -ne 0) { exit 1 }"
+    set "INSTALL_RESULT=%errorlevel%"
+)
 
 echo.
 echo ═══════════════════════════════════════════════════════════════════════════════

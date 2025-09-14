@@ -1,126 +1,111 @@
+
 # PowerShell Enhanced Profile
 
-A streamlined PowerShell profile with Linux-like aliases, system monitoring, and enhanced prompt that works seamlessly across both PowerShell 5.1 and PowerShell Core 7+.
+An advanced, cross-version PowerShell enhancement suite providing a Linux-like experience, productivity tools, and a beautiful prompt for both Windows PowerShell 5.1 and PowerShell Core 7+. Designed for seamless, automated setup and robust user experience on Windows.
 
-## Quick Installation
 
-**🚀 One-click installation:**
+## 🚀 Quick Start
+
+**Recommended (GitHub download & clean install):**
 ```batch
-install.bat
+quick-setup.bat
 ```
 
-**📦 Alternative method:**
+**Local install (if repo is cloned):**
 ```powershell
-# Download and run manually
-Invoke-WebRequest -Uri "https://github.com/ichimbogdancristian/powershell/raw/main/install.bat" -OutFile "install.bat"
-.\install.bat
+# Clean install (removes all profile contents, no backups)
+./quick-install.ps1 -CleanInstall
+
+# Preserve existing configs
+./quick-install.ps1
 ```
 
-## ✨ Features
 
-- **🐧 Linux-like aliases**: `ll`, `la`, `grep`, `which`, `neofetch`, `health`
-- **📊 System monitoring**: Real-time CPU, memory, and disk usage
-- **🔧 Git integration**: Enhanced git status and shortcuts (`gs`, `gl`)
-- **🎨 Oh My Posh themes**: Beautiful customizable prompts
-- **📁 Smart navigation**: Enhanced directory listing with zoxide smart jumping (`z` command)
-- **⚡ Cross-platform**: Supports both PowerShell 5.1 and 7+
-- **🔄 Optimized**: Fast loading, minimal resource usage
+## ✨ Key Features
 
-## Installation Requirements
+- **🐧 Linux-like aliases**: `ll`, `la`, `grep`, `find`, `top`, `df`, `free`, etc.
+- **📊 System monitoring**: `neofetch`, `health` commands with real-time stats
+- **🔧 Git integration**: Enhanced git status and branch info
+- **🎨 Oh My Posh themes**: Custom, beautiful prompt with platform, git, and system info
+- **📁 Enhanced file operations**: Smart `ls` with icons, colors, and details
+- **⚡ Cross-platform**: Installs for both PowerShell 5.1 and 7+ automatically
+- **🔄 Smart installation**: Clean install option, automatic backups, cross-version support
 
-- **OS**: Windows 10 (1903+) or Windows 11
-- **PowerShell**: 5.1 or 7+ (automatically detected)
-- **Memory**: 1 GB RAM minimum
-- **Internet**: Required for initial setup
 
-## What Gets Installed
+## 🛠️ Requirements
 
-1. **PowerShell Modules**: PSReadLine, posh-git, Terminal-Icons
-2. **Tools**: Oh My Posh, Git (via winget)
-3. **Profile**: Enhanced PowerShell profile with custom functions
-4. **Theme**: Custom Oh My Posh theme with system indicators
+- **OS**: Windows 10/11 (or Server 2019/2022)
+- **PowerShell**: 5.1 and/or 7+
+- **Internet**: Required for first-time setup
 
-**Installation Locations:**
+
+## 📦 What Gets Installed
+
+1. **PowerShell Modules**: PSReadLine, posh-git, Terminal-Icons (from Gallery or bundled)
+2. **Tools**: Oh My Posh, Git, Zoxide (via winget)
+3. **Profile**: Unified, robust PowerShell profile with aliases, prompt, and helpers
+4. **Theme**: Custom Oh My Posh theme (`oh-my-posh-default.json`)
+
+**Profile Locations:**
 - PowerShell Core: `Documents\PowerShell\`
 - Windows PowerShell: `Documents\WindowsPowerShell\`
 
-## Available Commands
 
-After installation, try these commands:
+## 🏁 Example Commands
 
 ```powershell
 neofetch        # System information
 ll              # Enhanced directory listing
-z documents     # Smart jump to Documents folder
-health          # System health check
-myip            # Show public IP
-gs              # Git status
-help-profile    # Show all commands
+health          # System health status
+help-profile    # Show all available commands
+z <dir>         # Smart jump (if zoxide installed)
 ```
 
-## System Compatibility
 
-### Supported Configurations
-- ✅ **PowerShell 7.0+** (Recommended)
-- ✅ **PowerShell 5.1** (Windows built-in)
-- ✅ **Windows 11** (All editions)
-- ✅ **Windows 10** (Version 1903+)
-- ✅ **Windows Server 2019/2022**
+## 🧠 How It Works
 
-### Documents Folder Detection
-The installer automatically detects Documents folders in this order:
-1. **System Documents**: `[Environment]::GetFolderPath("MyDocuments")`
-2. **User Documents**: `%USERPROFILE%\Documents`
-3. **OneDrive Documents**: `%OneDrive%\Documents` (if available)
+- Detects all installed PowerShell versions and deploys profiles to both
+- Cleans profile directories if `-CleanInstall` is used (no backups)
+- Installs modules from Gallery or uses bundled versions for reliability
+- Installs tools via `winget` if available
+- Verifies theme and font setup after install
 
-### Installation Process
-The `install.bat` file automatically:
-- Checks for administrator privileges
-- Downloads the latest version from GitHub
-- Installs required PowerShell modules (PSReadLine, posh-git, Terminal-Icons)
-- Installs productivity tools (Oh My Posh, Git, Zoxide)
-- Configures profiles for all PowerShell versions
-- Sets up custom Oh My Posh themes
 
-### Smart Directory Navigation with Zoxide
-After installation, use the `z` command for intelligent directory jumping:
-```powershell
-z documents     # Jump to Documents folder
-z desktop       # Jump to Desktop
-z proj          # Jump to your most-used "project" folder
-z pow setup     # Jump to PowerShell setup directory
-```
-Zoxide learns your navigation patterns and gets smarter over time!
+## 🎨 Theme Customization
 
-## Theme Customization
-
-The project includes a custom Oh My Posh theme with:
-- OS detection with platform icons
-- Smart path display with folder icons
-- Git status indicators
-- Execution time tracking
-- Real-time clock and system status
+The included `oh-my-posh-default.json` theme provides:
+- OS and platform icons
+- Smart path and folder icons
+- Git status, branch, and change indicators
+- Node.js and Python environment detection
+- Execution time, clock, and admin status
 
 To use a different theme:
 ```powershell
 # List available themes
 Get-PoshThemes
 
-# Set a different theme (temporary)
+# Set a different theme temporarily
 oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\[theme-name].omp.json" | Invoke-Expression
+# To make permanent, edit the profile or replace oh-my-posh-default.json
 ```
 
-## Troubleshooting
+
+## 🛠️ Troubleshooting
+
+**Theme not loading:**
+1. Ensure Oh My Posh is installed: `winget install JanDeDobbeleer.OhMyPosh`
+2. Check if theme file exists in your PowerShell directory
+3. Restart PowerShell after installation
+
+**Icons not displaying:**
+1. Install a Nerd Font (e.g., FiraCode Nerd Font)
+2. Set your terminal font to the Nerd Font
 
 **Profile not loading:**
-1. Restart PowerShell after installation
+1. Run the installer again
 2. Check execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
-3. Verify installation: `Test-Path $PROFILE`
-
-**Theme not displaying:**
-1. Install a Nerd Font (recommended: FiraCode Nerd Font)
-2. Set terminal font to the Nerd Font
-3. Ensure Oh My Posh is installed: `winget install JanDeDobbeleer.OhMyPosh`
+3. Restart PowerShell
 
 **Module errors:**
 1. Update PowerShell: `winget upgrade Microsoft.PowerShell`
@@ -128,9 +113,12 @@ oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\[theme-name].omp.json" | In
 
 **Performance issues:**
 - The profile is optimized for fast loading
-- Disable predictions if needed: Add `$env:POSH_DISABLE_PREDICTIONS = $true` to profile
+- Disable animations: `$env:POSH_DISABLE_ANIMATIONS = $true`
 
 ---
 
-**Repository:** https://github.com/ichimbogdancristian/powershell  
+
+---
+
+**Repository:** https://github.com/ichimbogdancristian/powershell
 **Author:** Bogdan Ichim
