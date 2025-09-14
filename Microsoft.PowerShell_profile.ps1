@@ -8,45 +8,14 @@
 # Module Imports
 # ═══════════════════════════════════════════════════════════════════════════════
 
-<<<<<<< HEAD
-# Import essential modules with error handling
-$modules = @("PSReadLine", "posh-git", "Terminal-Icons")
-foreach ($module in $modules) {
-    try {
-        Import-Module $module -Force -ErrorAction SilentlyContinue
-    }
-    catch {
-        # Silently continue if module not available
-    }
-}
+# Import required modules with error handling
+try { Import-Module PSReadLine -Force -ErrorAction SilentlyContinue } catch { }
+try { Import-Module posh-git -Force -ErrorAction SilentlyContinue } catch { }
+try { Import-Module Terminal-Icons -Force -ErrorAction SilentlyContinue } catch { }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PSReadLine Configuration
+# PSReadLine Configuration (Enhanced History & Autocompletion)
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if (Get-Module PSReadLine) {
-    Set-PSReadLineOption -EditMode Windows
-    Set-PSReadLineOption -MaximumHistoryCount 4000
-    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-    Set-PSReadLineKeyHandler -Key Ctrl+d -Function DeleteChar
-    
-    # Enable prediction for PSReadLine 2.1+
-    $psReadLineVersion = (Get-Module PSReadLine).Version
-    if ($psReadLineVersion -ge [version]"2.1.0") {
-        Set-PSReadLineOption -PredictionSource History
-        Set-PSReadLineOption -PredictionViewStyle InlineView
-    }
-    
-    # Colors
-    =======
-    # Import required modules with error handling
-    try { Import-Module PSReadLine -Force -ErrorAction SilentlyContinue } catch { }
-    try { Import-Module posh-git -Force -ErrorAction SilentlyContinue } catch { }
-    try { Import-Module Terminal-Icons -Force -ErrorAction SilentlyContinue } catch { }
-
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # PSReadLine Configuration (Enhanced History & Autocompletion)
-    # ═══════════════════════════════════════════════════════════════════════════════
 
     # Check PSReadLine version and configure accordingly
     $psReadLineModule = Get-Module PSReadLine
@@ -98,6 +67,21 @@ if (Get-Module PSReadLine) {
     }
     catch { }
 
+    # Enhanced key handlers for better suggestions
+    try {
+        # Ctrl+Space for menu complete (alternative to Tab)
+        Set-PSReadLineKeyHandler -Key Ctrl+Spacebar -Function MenuComplete
+        # Ctrl+Shift+Space for inline suggestions
+        Set-PSReadLineKeyHandler -Key Ctrl+Shift+Spacebar -Function InlineSuggestion
+        # F1 for help on current command
+        Set-PSReadLineKeyHandler -Key F1 -Function ShowCommandHelp
+        # Ctrl+RightArrow for forward word
+        Set-PSReadLineKeyHandler -Key Ctrl+RightArrow -Function ForwardWord
+        # Ctrl+LeftArrow for backward word
+        Set-PSReadLineKeyHandler -Key Ctrl+LeftArrow -Function BackwardWord
+    }
+    catch { }
+
     # Colors for different types of input (with error handling)
     try {
         Set-PSReadLineOption -Colors @{
@@ -108,47 +92,46 @@ if (Get-Module PSReadLine) {
             String    = 'Yellow'
             Number    = 'Red'
             Type      = 'DarkCyan'
-            >>>>>>> push-commit-a4f1cab7
+            Comment   = 'DarkGreen'
+            Keyword   = 'Magenta'
+            Error     = 'Red'
+            Selection = 'DarkGray'
         }
+    }
+    catch { }
 
-        # ═══════════════════════════════════════════════════════════════════════════════
-        # Oh My Posh Configuration
-        # ═══════════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Oh My Posh Configuration
+    # ═══════════════════════════════════════════════════════════════════════════════
 
-        <<<<<<< HEAD
-        if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-            $themeFile = Join-Path (Split-Path $PROFILE -Parent) "oh-my-posh-default.json"
-            if (Test-Path $themeFile) {
-                oh-my-posh init pwsh --config $themeFile | Invoke-Expression
-                =======
-                # VS Code optimizations
-                if ($env:TERM_PROGRAM -eq "vscode") {
-                    # Disable Oh My Posh animations in VS Code for better performance
-                    $env:POSH_DISABLE_ANIMATIONS = $true
-                }
+    # VS Code optimizations
+    if ($env:TERM_PROGRAM -eq "vscode") {
+        # Disable Oh My Posh animations in VS Code for better performance
+        $env:POSH_DISABLE_ANIMATIONS = $true
+    }
 
-                # Initialize Oh My Posh with default theme
-                # Try multiple locations for the theme file, ensuring robust path detection
-                $profileDir = Split-Path $PROFILE -Parent
-                $themeLocations = @(
-                    # First try in the same directory as the profile
-                    (Join-Path $profileDir "oh-my-posh-default.json"),
-                    # Try in PowerShell directory
-                    (Join-Path $env:USERPROFILE "Documents\PowerShell\oh-my-posh-default.json"),
-                    # Try in WindowsPowerShell directory  
-                    (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\oh-my-posh-default.json"),
-                    # Try using PSScriptRoot if it exists
-                    $(if ($PSScriptRoot) { Join-Path $PSScriptRoot "oh-my-posh-default.json" }),
-                    # Try current working directory as last resort
-                    ".\oh-my-posh-default.json"
-                )
+    # Initialize Oh My Posh with default theme
+    # Try multiple locations for the theme file, ensuring robust path detection
+    $profileDir = Split-Path $PROFILE -Parent
+    $themeLocations = @(
+        # First try in the same directory as the profile
+        (Join-Path $profileDir "oh-my-posh-default.json"),
+        # Try in PowerShell directory
+        (Join-Path $env:USERPROFILE "Documents\PowerShell\oh-my-posh-default.json"),
+        # Try in WindowsPowerShell directory
+        (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\oh-my-posh-default.json"),
+        # Try using PSScriptRoot if it exists
+        $(if ($PSScriptRoot) { Join-Path $PSScriptRoot "oh-my-posh-default.json" }),
+        # Try current working directory as last resort
+        ".\oh-my-posh-default.json"
+    )
 
-                # Filter out null/empty paths
-                $themeLocations = $themeLocations | Where-Object { $_ -and (Test-Path $_ -IsValid) }
+    # Filter out null/empty paths
+    $themeLocations = $themeLocations | Where-Object { $_ -and (Test-Path $_ -IsValid) }
 
-                $ohMyPoshTheme = $null
-                foreach ($location in $themeLocations) {
-                    if (Test-Path $location) {
+    $ohMyPoshTheme = $null
+    foreach ($location in $themeLocations) {
+        if (Test-Path $location) {
                         $ohMyPoshTheme = $location
                         Write-Verbose "Found Oh My Posh theme at: $ohMyPoshTheme"
                         break
@@ -192,7 +175,6 @@ if (Get-Module PSReadLine) {
                     }
                     catch {
                         Write-Warning "Could not initialize Oh My Posh. Please check installation."
-                        >>>>>>> push-commit-a4f1cab7
                     }
                 }
 
@@ -201,18 +183,14 @@ if (Get-Module PSReadLine) {
                 # ═══════════════════════════════════════════════════════════════════════════════
 
                 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-                    <<<<<<< HEAD
-                    Invoke-Expression (& { (zoxide init powershell | Out-String) })
-    
-                    # Enhanced zoxide functions
-                    function zz { z $args; Get-ChildItemColorized }  # Jump and list contents
-                    function zh { zoxide query --list | Select-Object -First 10 }  # Show recent directories
-                    =======
                     Invoke-Expression (& {
                             $hook = if ($PSVersionTable.PSVersion.Major -lt 6) { 'prompt' } else { 'pwd' }
                             (zoxide init --hook $hook powershell) -join "`n"
                         })
-                    >>>>>>> push-commit-a4f1cab7
+
+                    # Enhanced zoxide functions
+                    function zz { z $args; Get-ChildItemColorized }  # Jump and list contents
+                    function zh { zoxide query --list | Select-Object -First 10 }  # Show recent directories
                 }
 
                 # ═══════════════════════════════════════════════════════════════════════════════
@@ -286,7 +264,6 @@ if (Get-Module PSReadLine) {
                 function Get-GitStatus { git status @args }
                 function Get-GitLog { git log --oneline -10 @args }
 
-                <<<<<<< HEAD
                 # Process management
                 function Get-ProcessesByName {
                     param([string]$Name)
@@ -296,9 +273,14 @@ if (Get-Module PSReadLine) {
                 # Help function
                 function Get-ProfileHelp {
                     Write-Host "PowerShell Enhanced Profile - Available Commands" -ForegroundColor Cyan
-                    =======
-                    # System Information
-                    Set-Alias -Name neofetch -Value Get-SystemInfo
+                    Write-Host "System Info: neofetch, sysinfo, health" -ForegroundColor White
+                    Write-Host "Navigation: zz (jump + list), zh (recent dirs)" -ForegroundColor White
+                    Write-Host "Git: gs (status), gl (log)" -ForegroundColor White
+                    Write-Host "Network: Get-PublicIP, Test-InternetConnection" -ForegroundColor White
+                }
+
+                # System Information
+                Set-Alias -Name neofetch -Value Get-SystemInfo
                     Set-Alias -Name df -Value Get-DiskUsage
                     Set-Alias -Name free -Value Get-MemoryUsage
                     Set-Alias -Name uptime -Value Get-Uptime
@@ -1214,7 +1196,6 @@ if (Get-Module PSReadLine) {
                         }
     
                         # Display header
-                        >>>>>>> push-commit-a4f1cab7
                         Write-Host ""
                         Write-Host "Directory Navigation:" -ForegroundColor Yellow
                         Write-Host "  ll [path]     - Enhanced directory listing" -ForegroundColor White
@@ -1224,13 +1205,11 @@ if (Get-Module PSReadLine) {
                         Write-Host "  zz [dir]      - Jump and list contents" -ForegroundColor White
                         Write-Host "  zh            - Show recent directories" -ForegroundColor White
                         Write-Host ""
-                        <<<<<<< HEAD
                         Write-Host "System Information:" -ForegroundColor Yellow
                         Write-Host "  neofetch      - System information display" -ForegroundColor White
                         Write-Host "  health        - System health check" -ForegroundColor White
                         Write-Host "  myip          - Show public IP address" -ForegroundColor White
                         Write-Host "  testnet       - Test internet connection" -ForegroundColor White
-                        =======
     
                         # Create structured table output
                         $tableData = @()
@@ -1297,7 +1276,6 @@ if (Get-Module PSReadLine) {
                         }
     
                         # Display summary
-                        >>>>>>> push-commit-a4f1cab7
                         Write-Host ""
                         Write-Host "Git Shortcuts:" -ForegroundColor Yellow
                         Write-Host "  gs            - Git status" -ForegroundColor White
