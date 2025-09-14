@@ -545,20 +545,22 @@ if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
 }
 
 if (Get-Command Get-Clipboard -ErrorAction SilentlyContinue) {
-    function Paste-FromClipboard {
+    function Get-ClipboardContent {
         $clip = Get-Clipboard
         Write-Host $clip
         return $clip
     }
 } else {
-    function Paste-FromClipboard {
+    function Get-ClipboardContent {
         Write-Host "Get-Clipboard is not available. Please update PowerShell or install the required module." -ForegroundColor Yellow
         return $null
     }
 }
 
+# Backward compatibility alias for old function name (was Paste-FromClipboard)
+Set-Alias -Name Paste-FromClipboard -Value Get-ClipboardContent -Scope Global -Force
 New-Alias -Name copyclip -Value Copy-ToClipboard -Force
-New-Alias -Name pasteclip -Value Paste-FromClipboard -Force
+New-Alias -Name pasteclip -Value Get-ClipboardContent -Force
 
 # ═══════════════════════════════════════════════════════════════════════════════
 
