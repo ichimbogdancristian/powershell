@@ -20,6 +20,13 @@ echo [INFO] Repository: %REPO_URL%
 echo [INFO] Temporary directory: %TEMP_DIR%
 echo.
 
+rem --- create timestamped logfile for install run ---
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"`) do set TIMESTAMP=%%T
+set "LOG_FILE=%TEMP%\powershell-install-%TIMESTAMP%.log"
+echo [INFO] Logfile: %LOG_FILE%
+echo === Install log started at %TIMESTAMP% === > "%LOG_FILE%"
+
+
 REM System Information
 echo [SYSTEM] Gathering system information...
 echo [INFO] Computer: %COMPUTERNAME% (%USERNAME%)
@@ -235,19 +242,11 @@ if "%PROFILE_CHOICE%"=="6" (
     goto :eof
 )
 if "%PROFILE_CHOICE%"=="1" (
-    echo [QUESTION] Are you sure you want to proceed to installation? (y/n)
-    set /p PROCEED_CONFIRM=
-    if /i "%PROCEED_CONFIRM%"=="y" (
-        echo [INFO] Proceeding to installation...
-        echo.
-        echo [INFO] Press any key to begin installation. If you launched this by double-click, this prevents the window from closing immediately.
-        pause
-        goto do_install
-    ) else (
-        echo [INFO] Returning to profile menu.
-        echo.
-        goto profile_menu
-    )
+    echo [INFO] Proceeding to installation...
+    echo.
+    echo [INFO] Press any key to begin installation. If you launched this by double-click, this prevents the window from closing immediately.
+    pause
+    goto do_install
 )
 
 :do_install
@@ -262,21 +261,21 @@ powershell -Command "try { Get-Module PSReadLine -ListAvailable -ErrorAction Sto
 
 REM Check tools
 set "TOOLS_OK=1"
-where oh-my-posh
+where oh-my-posh >> "%LOG_FILE%" 2>&1
 if %errorlevel% equ 0 (
     echo [OK] oh-my-posh tool found
 ) else (
     echo [INFO] oh-my-posh tool not found
     set "TOOLS_OK=0"
 )
-where git
+where git >> "%LOG_FILE%" 2>&1
 if %errorlevel% equ 0 (
     echo [OK] git tool found
 ) else (
     echo [INFO] git tool not found
     set "TOOLS_OK=0"
 )
-where zoxide
+where zoxide >> "%LOG_FILE%" 2>&1
 if %errorlevel% equ 0 (
     echo [OK] zoxide tool found
 ) else (
@@ -286,9 +285,12 @@ if %errorlevel% equ 0 (
 
 if %MODULES_OK% equ 1 if %TOOLS_OK% equ 1 (
     echo [INFO] All dependencies and modules are already installed.
-    echo [QUESTION] Do you want to skip installation and just update the profile? (y/n)
-    set /p SKIP_CHOICE=
-    if /i "%SKIP_CHOICE%"=="y" (
+    echo [QUESTION] Do you want to skip installation and just update the profile?
+    choice /M "Skip full installation and update profile only?"
+    if errorlevel 2 (
+        echo [INFO] User chose to continue with full install >> "%LOG_FILE%"
+    ) else (
+        echo [INFO] User chose to skip full install and update profile only >> "%LOG_FILE%"
         set "SKIP_INSTALL=1"
         goto :skip_install
     )
@@ -299,7 +301,7 @@ REM Check dependencies
 echo [CHECK] Verifying system dependencies...
 
 REM Check PowerShell
-where powershell
+where powershell >> "%LOG_FILE%" 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] PowerShell not found in system PATH
     echo [SOLUTION] Install PowerShell from:
@@ -316,7 +318,7 @@ for /f "tokens=*" %%v in ('powershell -Command "$PSVersionTable.PSVersion.ToStri
 
 REM Check internet connectivity
 echo [CHECK] Testing internet connectivity...
-ping -n 1 github.com
+ping -n 1 github.com >> "%LOG_FILE%" 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Cannot reach GitHub. Check your internet connection.
     goto :error_exit
@@ -346,7 +348,7 @@ echo [DOWNLOAD] Downloading PowerShell profile repository...
 echo [INFO] This may take a moment depending on your connection...
 
 REM Download repository using PowerShell with improved error handling
-powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%REPO_URL%/archive/refs/heads/main.zip' -OutFile '%ZIP_FILE%' -UseBasicParsing -TimeoutSec 30; Write-Host '[OK] Repository downloaded successfully' -ForegroundColor Green } catch { Write-Host '[ERROR] Download failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }"
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%REPO_URL%/archive/refs/heads/main.zip' -OutFile '%ZIP_FILE%' -UseBasicParsing -TimeoutSec 30; Write-Host '[OK] Repository downloaded successfully' -ForegroundColor Green } catch { Write-Host '[ERROR] Download failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }" >> "%LOG_FILE%" 2>&1
 
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to download repository
@@ -357,7 +359,7 @@ echo.
 echo [EXTRACT] Extracting repository files...
 
 REM Extract ZIP file using PowerShell
-powershell -Command "try { Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force; Write-Host '[OK] Files extracted successfully' -ForegroundColor Green } catch { Write-Host '[ERROR] Extraction failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }"
+powershell -Command "try { Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force; Write-Host '[OK] Files extracted successfully' -ForegroundColor Green } catch { Write-Host '[ERROR] Extraction failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }" >> "%LOG_FILE%" 2>&1
 
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to extract repository files
@@ -395,16 +397,16 @@ if "%SKIP_INSTALL%"=="1" (
     echo [INFO] Skipping full installation, updating profile only...
     REM Copy profile files to both locations
     if not exist "%PS_PROFILE_DIR%" mkdir "%PS_PROFILE_DIR%"
-    copy "Microsoft.PowerShell_profile.ps1" "%PS_PROFILE_DIR%\" /Y
-    copy "oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y
+    copy "Microsoft.PowerShell_profile.ps1" "%PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
+    copy "oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
     if not exist "%WIN_PS_PROFILE_DIR%" mkdir "%WIN_PS_PROFILE_DIR%"
-    copy "Microsoft.PowerShell_profile.ps1" "%WIN_PS_PROFILE_DIR%\" /Y
-    copy "oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y
+    copy "Microsoft.PowerShell_profile.ps1" "%WIN_PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
+    copy "oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
     REM Copy modules if needed
     if not exist "%PS_PROFILE_DIR%\Modules" mkdir "%PS_PROFILE_DIR%\Modules"
-    xcopy "Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y
+    xcopy "Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y >> "%LOG_FILE%" 2>&1
     if not exist "%WIN_PS_PROFILE_DIR%\Modules" mkdir "%WIN_PS_PROFILE_DIR%\Modules"
-    xcopy "Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y
+    xcopy "Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y >> "%LOG_FILE%" 2>&1
     echo [OK] Profile updated successfully
     set "INSTALL_RESULT=0"
 ) else (
@@ -447,6 +449,7 @@ if %INSTALL_RESULT% equ 0 if %PROFILE_CHECK% equ 0 (
     echo [OK] Cleanup completed
     echo.
     echo [INFO] Press any key to close this window...
+    echo === Install completed successfully at %DATE% %TIME% === >> "%LOG_FILE%"
     pause
 ) else (
     color 0C
@@ -461,6 +464,7 @@ if %INSTALL_RESULT% equ 0 if %PROFILE_CHECK% equ 0 (
     echo.
     echo [INFO] Temporary files left for debugging: %TEMP_DIR%
     echo [INFO] Press any key to close this window...
+    echo === Install FAILED at %DATE% %TIME% (see %LOG_FILE%) === >> "%LOG_FILE%"
     pause
 )
 
@@ -481,4 +485,5 @@ echo 5. Check Windows version compatibility
 echo.
 echo [INFO] Press any key to close this window...
 pause
+echo === Pre-install checks FAILED at %DATE% %TIME% (see %LOG_FILE%) === >> "%LOG_FILE%"
 exit /b 1
