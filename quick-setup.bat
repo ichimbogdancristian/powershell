@@ -36,6 +36,12 @@ set "WIN_PS_PROFILE_DIR=%USERPROFILE%\Documents\WindowsPowerShell"
 set "BACKUP_PROFILE=%PS_PROFILE%.backup"
 set "DEFAULT_PROFILE=%TEMP%\Microsoft.PowerShell_profile_default.ps1"
 
+rem Extract profile filename and directory for backup management
+for %%F in ("%PS_PROFILE%") do (
+    set "PROFILE_NAME=%%~nxF"
+    set "PROFILE_DIR=%%~dpF"
+)
+
 echo [INFO] PowerShell Core profile: %PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
 echo [INFO] Windows PowerShell profile: %WIN_PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
 echo.
@@ -49,7 +55,8 @@ echo   2. Restore previous backup
 echo   3. Restore Microsoft default profile
 echo   4. Proceed to installation
 echo   5. Quit
-set /p PROFILE_CHOICE="Enter your choice (1-5): "
+echo   6. Manage backups (list/delete)
+set /p PROFILE_CHOICE="Enter your choice (1-6): "
 
 if "%PROFILE_CHOICE%"=="1" (
     if exist "%PS_PROFILE%" (
@@ -107,6 +114,64 @@ if "%PROFILE_CHOICE%"=="3" (
 if "%PROFILE_CHOICE%"=="5" (
     echo [INFO] Installation cancelled by user.
     goto :eof
+)
+if "%PROFILE_CHOICE%"=="6" (
+    echo [INFO] Looking for backups matching: %PROFILE_DIR%%PROFILE_NAME%*.backup
+    set BK_COUNT=0
+    for %%B in ("%PROFILE_DIR%%PROFILE_NAME%*.backup") do (
+        if exist "%%~fB" (
+            set /a BK_COUNT+=1
+            set "BK!BK_COUNT!=%%~fB"
+        )
+    )
+    if %BK_COUNT% equ 0 (
+        echo [INFO] No backups found for %PROFILE_NAME%
+        echo.
+        goto profile_menu
+    )
+    echo [BACKUPS]
+    for /L %%I in (1,1,%BK_COUNT%) do (
+        call echo %%I. %%BK%%I%%
+    )
+    echo.
+    set /p DEL_CHOICE="Enter number to delete, 'a' to delete all, or press Enter to return: "
+    if "%DEL_CHOICE%"=="" (
+        echo.
+        goto profile_menu
+    )
+    if /i "%DEL_CHOICE%"=="a" (
+        set /p CONFIRM="Are you sure you want to delete ALL backups? (y/n): "
+        if /i "%CONFIRM%"=="y" (
+            for /L %%I in (1,1,%BK_COUNT%) do (
+                call del /f /q "%%BK%%I%%" 2>nul
+            )
+            echo [OK] Deleted %BK_COUNT% backups.
+        ) else (
+            echo [INFO] Cancelled.
+        )
+        echo.
+        goto profile_menu
+    )
+    rem Delete a single backup by number
+    call set "TARGET=%%BK%DEL_CHOICE%%%"
+    if "%TARGET%"=="" (
+        echo [ERROR] Invalid selection.
+        echo.
+        goto profile_menu
+    )
+    set /p CONFIRM="Are you sure you want to delete '%TARGET%'? (y/n): "
+    if /i "%CONFIRM%"=="y" (
+        del /f /q "%TARGET%" 2>nul
+        if %errorlevel% equ 0 (
+            echo [OK] Deleted: %TARGET%
+        ) else (
+            echo [ERROR] Failed to delete: %TARGET%
+        )
+    ) else (
+        echo [INFO] Cancelled.
+    )
+    echo.
+    goto profile_menu
 )
 if "%PROFILE_CHOICE%"=="4" (
     echo [QUESTION] Are you sure you want to proceed to installation? (y/n)
