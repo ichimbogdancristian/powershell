@@ -44,6 +44,7 @@ if not defined PS_PROFILE (
     goto :error_exit
 )
 
+
 REM Extract profile directory and filename safely
 for %%F in ("%PS_PROFILE%") do (
     set "PROFILE_NAME=%%~nxF"
@@ -53,6 +54,19 @@ for %%F in ("%PS_PROFILE%") do (
 REM Fallback profile directories
 set "PS_PROFILE_DIR=%USERPROFILE%\Documents\PowerShell"
 set "WIN_PS_PROFILE_DIR=%USERPROFILE%\Documents\WindowsPowerShell"
+
+REM === Subroutine: Ensure Directory Exists ===
+:ensure_dir
+REM Usage: call :ensure_dir "dirpath"
+if not exist "%~1" (
+    echo [INFO] Creating directory: %~1
+    mkdir "%~1" 2>nul
+    if errorlevel 1 (
+        echo [ERROR] Failed to create directory: %~1
+        exit /b 1
+    )
+)
+exit /b 0
 
 echo [INFO] Current profile path: %PS_PROFILE%
 echo [INFO] Profile directory: %PROFILE_DIR%
@@ -314,62 +328,51 @@ if "%PROFILE_CHOICE%"=="1" (
 )
 
 :do_install
-REM === Dependency and Module Checks ===
-echo [CHECK] Checking for existing dependencies and modules...
+
+REM === Dependency and Module Checks and Installation ===
+echo [CHECK] Checking and installing dependencies and modules...
 echo [DEBUG] Entered :do_install label
 echo [DEBUG] Entered :do_install label >> "%LOG_FILE%" 2>nul
 
-REM Check PowerShell modules using file-based communication
-set "CHECK_FILE=%TEMP%\ps_module_check_%TIMESTAMP%.tmp"
-
-REM Check posh-git
-powershell -NoProfile -Command "try { Get-Module posh-git -ListAvailable -ErrorAction Stop | Out-Null; 'POSH_GIT_OK' | Out-File -FilePath '%CHECK_FILE%' -Append -Encoding ASCII; Write-Host '[OK] posh-git module found' -ForegroundColor Green } catch { Write-Host '[INFO] posh-git module not found' -ForegroundColor Yellow }" 2>nul
-
-REM Check Terminal-Icons
-powershell -NoProfile -Command "try { Get-Module Terminal-Icons -ListAvailable -ErrorAction Stop | Out-Null; 'TERMINAL_ICONS_OK' | Out-File -FilePath '%CHECK_FILE%' -Append -Encoding ASCII; Write-Host '[OK] Terminal-Icons module found' -ForegroundColor Green } catch { Write-Host '[INFO] Terminal-Icons module not found' -ForegroundColor Yellow }" 2>nul
-
-REM Check PSReadLine
-powershell -NoProfile -Command "try { Get-Module PSReadLine -ListAvailable -ErrorAction Stop | Out-Null; 'PSREADLINE_OK' | Out-File -FilePath '%CHECK_FILE%' -Append -Encoding ASCII; Write-Host '[OK] PSReadLine module found' -ForegroundColor Green } catch { Write-Host '[INFO] PSReadLine module not found' -ForegroundColor Yellow }" 2>nul
-
-REM Read results from file
+REM --- PowerShell Modules ---
 set "MODULES_OK=1"
-if exist "%CHECK_FILE%" (
-    findstr /C:"POSH_GIT_OK" "%CHECK_FILE%" >nul 2>&1 || set "MODULES_OK=0"
-    findstr /C:"TERMINAL_ICONS_OK" "%CHECK_FILE%" >nul 2>&1 || set "MODULES_OK=0"
-    findstr /C:"PSREADLINE_OK" "%CHECK_FILE%" >nul 2>&1 || set "MODULES_OK=0"
-    del "%CHECK_FILE%" 2>nul
-) else (
-    set "MODULES_OK=0"
+for %%M in ("PSReadLine" "posh-git" "Terminal-Icons") do (
+    powershell -NoProfile -Command "if (-not (Get-Module %%~M -ListAvailable -ErrorAction SilentlyContinue)) { Write-Host '[INFO] %%~M not found, installing...'; try { Install-Module %%~M -Repository PSGallery -Force -AllowClobber -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop; Write-Host '[OK] %%~M installed.' -ForegroundColor Green } catch { Write-Host '[ERROR] Failed to install %%~M: ' + $_.Exception.Message -ForegroundColor Red; exit 1 } } else { Write-Host '[OK] %%~M module found.' -ForegroundColor Green }" 
+    if !errorlevel! neq 0 set "MODULES_OK=0"
+    powershell -NoProfile -Command "try { Import-Module %%~M -ErrorAction Stop; Write-Host '[OK] %%~M imported.' -ForegroundColor Green } catch { Write-Host '[WARN] %%~M could not be imported: ' + $_.Exception.Message -ForegroundColor Yellow }"
 )
 
-REM Check tools
+REM --- Tools (winget) ---
 set "TOOLS_OK=1"
-where oh-my-posh >nul 2>&1
-if !errorlevel! equ 0 (
-    echo [OK] oh-my-posh tool found
-) else (
-    echo [INFO] oh-my-posh tool not found
+where winget >nul 2>&1
+if !errorlevel! neq 0 (
+    echo [WARN] winget not found. Please install oh-my-posh, git, and zoxide manually.
     set "TOOLS_OK=0"
-)
-
-where git >nul 2>&1
-if !errorlevel! equ 0 (
-    echo [OK] git tool found
 ) else (
-    echo [INFO] git tool not found
-    set "TOOLS_OK=0"
-)
-
-where zoxide >nul 2>&1
-if !errorlevel! equ 0 (
-    echo [OK] zoxide tool found
-) else (
-    echo [INFO] zoxide tool not found
-    set "TOOLS_OK=0"
+    for %%T in ("oh-my-posh" "git.git" "ajeetdsouza.zoxide") do (
+        set "TOOL_NAME=%%~T"
+        if "%%~T"=="oh-my-posh" set "TOOL_EXE=oh-my-posh"
+        if "%%~T"=="git.git" set "TOOL_EXE=git"
+        if "%%~T"=="ajeetdsouza.zoxide" set "TOOL_EXE=zoxide"
+        where !TOOL_EXE! >nul 2>&1
+        if !errorlevel! neq 0 (
+            echo [INFO] !TOOL_EXE! not found, installing with winget...
+            winget install %%~T --silent --accept-source-agreements --accept-package-agreements
+            where !TOOL_EXE! >nul 2>&1
+            if !errorlevel! neq 0 (
+                echo [WARN] !TOOL_EXE! may not be in PATH. Please restart your shell or install manually.
+                set "TOOLS_OK=0"
+            ) else (
+                echo [OK] !TOOL_EXE! installed.
+            )
+        ) else (
+            echo [OK] !TOOL_EXE! tool found.
+        )
+    )
 )
 
 if !MODULES_OK! equ 1 if !TOOLS_OK! equ 1 (
-    echo [INFO] All dependencies and modules are already installed.
+    echo [INFO] All dependencies and modules are installed.
     echo [QUESTION] Do you want to skip installation and just update the profile?
     choice /M "Skip full installation and update profile only" 2>nul
     if !errorlevel! equ 2 (
@@ -471,75 +474,52 @@ echo [INSTALL] Starting PowerShell profile installation...
 echo [INFO] Running installation script from downloaded repository...
 
 REM Check if we're in skip mode and handle accordingly
-if "%SKIP_INSTALL%"=="1" (
-    echo [INFO] Skipping full installation, updating profile only...
-    
-    REM Create profile directories if they don't exist
-    if not exist "%PS_PROFILE_DIR%" (
-        echo [INFO] Creating PowerShell profile directory: %PS_PROFILE_DIR%
-        mkdir "%PS_PROFILE_DIR%" 2>nul
-        if !errorlevel! neq 0 (
-            echo [ERROR] Failed to create directory: %PS_PROFILE_DIR%
-            goto :error_exit
-        )
-    )
-    
-    if not exist "%WIN_PS_PROFILE_DIR%" (
-        echo [INFO] Creating Windows PowerShell profile directory: %WIN_PS_PROFILE_DIR%
-        mkdir "%WIN_PS_PROFILE_DIR%" 2>nul
-        if !errorlevel! neq 0 (
-            echo [ERROR] Failed to create directory: %WIN_PS_PROFILE_DIR%
-            goto :error_exit
-        )
-    )
-    
-    REM Copy profile files to both locations
-    if exist "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" (
-        copy "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" "%PS_PROFILE_DIR%\" /Y >nul 2>&1
-        if !errorlevel! equ 0 (
-            echo [OK] Copied profile to PowerShell Core directory
-        ) else (
-            echo [WARNING] Failed to copy profile to PowerShell Core directory
-        )
-        
-        copy "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" "%WIN_PS_PROFILE_DIR%\" /Y >nul 2>&1
-        if !errorlevel! equ 0 (
-            echo [OK] Copied profile to Windows PowerShell directory
-        ) else (
-            echo [WARNING] Failed to copy profile to Windows PowerShell directory
-        )
-    ) else (
-        echo [WARNING] Profile file not found in repository
-    )
-    
-    REM Copy theme file if it exists
-    if exist "%EXTRACT_DIR%\oh-my-posh-default.json" (
-        copy "%EXTRACT_DIR%\oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y >nul 2>&1
-        copy "%EXTRACT_DIR%\oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y >nul 2>&1
-        echo [OK] Copied theme configuration
-    )
-    
-    REM Copy modules if they exist
-    if exist "%EXTRACT_DIR%\Modules" (
-        if not exist "%PS_PROFILE_DIR%\Modules" mkdir "%PS_PROFILE_DIR%\Modules" 2>nul
-        if not exist "%WIN_PS_PROFILE_DIR%\Modules" mkdir "%WIN_PS_PROFILE_DIR%\Modules" 2>nul
-        
-        xcopy "%EXTRACT_DIR%\Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y /Q >nul 2>&1
-        xcopy "%EXTRACT_DIR%\Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y /Q >nul 2>&1
-        echo [OK] Copied custom modules
-    )
-    
-    echo [OK] Profile update completed
-    set "INSTALL_RESULT=0"
-    goto :verify_install
-) else (
-    REM Check if installation script exists
-    if not exist "%EXTRACT_DIR%\quick-install.ps1" (
-        echo [ERROR] Installation script not found in repository
-        echo [INFO] Available files in repository:
-        dir "%EXTRACT_DIR%" /b 2>nul
-        goto :error_exit
-    )
+
+       echo [INFO] Copying profile, theme, and modules to user profile directories...
+
+
+       REM Create profile directories if they don't exist (use subroutine)
+       call :ensure_dir "%PS_PROFILE_DIR%" || goto :error_exit
+       call :ensure_dir "%WIN_PS_PROFILE_DIR%" || goto :error_exit
+
+       REM Copy profile files to both locations (with UTF-8 BOM using PowerShell)
+       if exist "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" (
+           powershell -NoProfile -Command "[IO.File]::WriteAllText('%PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1', (Get-Content -Raw -Encoding UTF8 '%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1'), (New-Object System.Text.UTF8Encoding()))"
+           if !errorlevel! equ 0 (
+               echo [OK] Copied profile to PowerShell Core directory (UTF-8 BOM)
+           ) else (
+               echo [WARNING] Failed to copy profile to PowerShell Core directory
+           )
+           powershell -NoProfile -Command "[IO.File]::WriteAllText('%WIN_PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1', (Get-Content -Raw -Encoding UTF8 '%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1'), (New-Object System.Text.UTF8Encoding()))"
+           if !errorlevel! equ 0 (
+               echo [OK] Copied profile to Windows PowerShell directory (UTF-8 BOM)
+           ) else (
+               echo [WARNING] Failed to copy profile to Windows PowerShell directory
+           )
+       ) else (
+           echo [WARNING] Profile file not found in repository
+       )
+
+       REM Copy theme file if it exists
+       if exist "%EXTRACT_DIR%\oh-my-posh-default.json" (
+           copy "%EXTRACT_DIR%\oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y >nul 2>&1
+           copy "%EXTRACT_DIR%\oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y >nul 2>&1
+           echo [OK] Copied theme configuration
+       )
+
+       REM Copy modules if they exist
+
+       if exist "%EXTRACT_DIR%\Modules" (
+           call :ensure_dir "%PS_PROFILE_DIR%\Modules"
+           call :ensure_dir "%WIN_PS_PROFILE_DIR%\Modules"
+           xcopy "%EXTRACT_DIR%\Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y /Q >nul 2>&1
+           xcopy "%EXTRACT_DIR%\Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y /Q >nul 2>&1
+           echo [OK] Copied custom modules
+       )
+
+       echo [OK] Profile installation and configuration completed
+       set "INSTALL_RESULT=0"
+       goto :verify_install
 
     echo.
     echo ═══════════════════════════════════════════════════════════════════════════════
