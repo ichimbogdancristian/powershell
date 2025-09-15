@@ -64,6 +64,27 @@ echo   5. Manage backups (list/delete)
 echo   6. Quit
 set /p PROFILE_CHOICE="Enter your choice (1-6): "
 
+rem sanitize input: take first token so '1 anything' becomes '1'
+for /f "tokens=1" %%A in ("%PROFILE_CHOICE%") do set "PROFILE_CHOICE=%%~A"
+
+echo [DEBUG] PROFILE_CHOICE_RAW=%PROFILE_CHOICE%
+echo [DEBUG] PROFILE_CHOICE_RAW=%PROFILE_CHOICE% >> "%LOG_FILE%"
+
+rem validate numeric choice (1-6)
+if "%PROFILE_CHOICE%"=="1" goto _valid_choice
+if "%PROFILE_CHOICE%"=="2" goto _valid_choice
+if "%PROFILE_CHOICE%"=="3" goto _valid_choice
+if "%PROFILE_CHOICE%"=="4" goto _valid_choice
+if "%PROFILE_CHOICE%"=="5" goto _valid_choice
+if "%PROFILE_CHOICE%"=="6" goto _valid_choice
+
+echo [ERROR] Invalid choice: %PROFILE_CHOICE%
+echo [ERROR] Invalid choice: %PROFILE_CHOICE% >> "%LOG_FILE%"
+echo.
+goto profile_menu
+
+:_valid_choice
+
 if "%PROFILE_CHOICE%"=="2" (
     if exist "%PS_PROFILE%" (
         rem generate timestamp using PowerShell to avoid locale issues
@@ -246,12 +267,16 @@ if "%PROFILE_CHOICE%"=="1" (
     echo.
     echo [INFO] Press any key to begin installation. If you launched this by double-click, this prevents the window from closing immediately.
     pause
+    echo [DEBUG] pause completed, proceeding to :do_install
+    echo [DEBUG] pause completed, proceeding to :do_install >> "%LOG_FILE%"
     goto do_install
 )
 
 :do_install
 REM === Dependency and Module Checks ===
 echo [CHECK] Checking for existing dependencies and modules...
+echo [DEBUG] Entered :do_install label
+echo [DEBUG] Entered :do_install label >> "%LOG_FILE%"
 
 REM Check PowerShell modules
 set "MODULES_OK=1"
