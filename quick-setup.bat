@@ -4,10 +4,10 @@ title PowerShell Profile Quick Setup - GitHub Installation
 color 0A
 
 echo.
-echo ████████████████████████████████████████████████████████████████
+echo ███████████████████████████████████████████████████████████████
 echo █          PowerShell Enhanced Profile - GitHub Install       █
 echo █                    Repository Download                      █
-echo ████████████████████████████████████████████████████████████████
+echo ███████████████████████████████████████████████████████████████
 echo.
 
 REM Repository configuration
@@ -55,9 +55,15 @@ REM Fallback profile directories
 set "PS_PROFILE_DIR=%USERPROFILE%\Documents\PowerShell"
 set "WIN_PS_PROFILE_DIR=%USERPROFILE%\Documents\WindowsPowerShell"
 
+
 REM === Subroutine: Ensure Directory Exists ===
+REM -----------------------------------------------------------------------------
+REM :ensure_dir <dirpath>
+REM Ensures the specified directory exists. Creates it if missing.
+REM Usage: call :ensure_dir "C:\Path\To\Dir"
+REM Returns: 0 on success, 1 on failure
+REM -----------------------------------------------------------------------------
 :ensure_dir
-REM Usage: call :ensure_dir "dirpath"
 if not exist "%~1" (
     echo [INFO] Creating directory: %~1
     mkdir "%~1" 2>nul
@@ -76,6 +82,11 @@ echo.
 
 REM === Profile Management (interactive loop below) ===
 
+REM === Main Interactive Profile Menu ===
+REM -----------------------------------------------------------------------------
+REM Presents user with options: install, backup, restore, manage backups, quit.
+REM Handles input validation and dispatches to relevant logic blocks.
+REM -----------------------------------------------------------------------------
 :profile_menu
 echo [PROFILE] Choose an option before continuing:
 echo   1. Proceed to installation
@@ -105,6 +116,10 @@ echo [ERROR] Invalid choice: %PROFILE_CHOICE% >> "%LOG_FILE%" 2>nul
 echo.
 goto profile_menu
 
+REM === Menu Input Validation ===
+REM -----------------------------------------------------------------------------
+REM Validates user input and jumps to the selected option's logic block.
+REM -----------------------------------------------------------------------------
 :_valid_choice
 
 if "%PROFILE_CHOICE%"=="2" (
@@ -327,6 +342,10 @@ if "%PROFILE_CHOICE%"=="1" (
     goto do_install
 )
 
+REM === Main Install Logic ===
+REM -----------------------------------------------------------------------------
+REM Handles dependency/module/tool checks, download, extraction, and profile install.
+REM -----------------------------------------------------------------------------
 :do_install
 
 REM === Dependency and Module Checks and Installation ===
@@ -469,6 +488,11 @@ if not exist "%EXTRACT_DIR%" (
 echo [OK] Repository extracted to temporary location
 echo.
 
+REM === Profile Copy/Update Logic ===
+REM -----------------------------------------------------------------------------
+REM Handles copying profile, theme, and modules to user profile directories.
+REM Called for both full install and update-only scenarios.
+REM -----------------------------------------------------------------------------
 :skip_install
 echo [INSTALL] Starting PowerShell profile installation...
 echo [INFO] Running installation script from downloaded repository...
@@ -541,6 +565,10 @@ REM Check if we're in skip mode and handle accordingly
     echo ═══════════════════════════════════════════════════════════════════════════════
 )
 
+REM === Post-Install Verification ===
+REM -----------------------------------------------------------------------------
+REM Verifies that the profile and modules are installed and available.
+REM -----------------------------------------------------------------------------
 :verify_install
 REM Verify installation
 echo [VERIFY] Checking installation results...
@@ -602,6 +630,10 @@ if !INSTALL_RESULT! equ 0 if !PROFILE_CHECK! equ 0 (
 
 goto :eof
 
+REM === Error Exit Handler ===
+REM -----------------------------------------------------------------------------
+REM Handles fatal errors and displays troubleshooting info before exit.
+REM -----------------------------------------------------------------------------
 :error_exit
 echo.
 echo ═══════════════════════════════════════════════════════════════════════════════
