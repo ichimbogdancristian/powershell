@@ -117,6 +117,11 @@ function Clear-OldProfiles {
 }
 
 try {
+    # Warn if not running as admin (for winget installs)
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Log "Warning: Not running as Administrator. Some installs (winget) may fail or require elevation." "WARN"
+    }
     Log "Starting PowerShell profile installation..." "STEP"
     Log "Script location: $PSScriptRoot" "INFO"
     Log "Current PowerShell version: $($PSVersionTable.PSVersion)" "INFO"
@@ -155,13 +160,20 @@ try {
         if (-not (Get-Module $module -ListAvailable -ErrorAction SilentlyContinue)) {
             Log "Installing $module..." "INFO"
             try {
-                Install-Module $module -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop -Confirm:$false
+                Install-Module $module -Repository PSGallery -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop -Confirm:$false -SkipPublisherCheck
                 Log "$module installed successfully" "OK"
             } catch {
                 Log "Failed to install $module - $($_.Exception.Message)" "ERROR"
             }
         } else {
             Log "$module already available" "OK"
+        }
+        # Try to import the module to verify installation
+        try {
+            Import-Module $module -ErrorAction Stop
+            Log "$module imported successfully" "OK"
+        } catch {
+            Log "Failed to import $module - $($_.Exception.Message)" "WARN"
         }
     }
 
@@ -175,12 +187,18 @@ try {
         )
         foreach ($tool in $tools) {
             Log "Checking tool: $($tool.name)" "INFO"
-            if (-not (Get-Command $tool.name -ErrorAction SilentlyContinue)) {
+            $toolCmd = Get-Command $tool.name -ErrorAction SilentlyContinue
+            if (-not $toolCmd) {
                 Log "Installing $($tool.name)..." "INFO"
                 try {
                     $process = Start-Process winget -ArgumentList "install", $tool.id, "--silent", "--accept-source-agreements", "--accept-package-agreements" -Wait -PassThru -NoNewWindow
                     if ($process.ExitCode -eq 0) {
                         Log "$($tool.name) installed successfully" "OK"
+                        # Check if tool is now in PATH
+                        $toolCmd2 = Get-Command $tool.name -ErrorAction SilentlyContinue
+                        if (-not $toolCmd2) {
+                            Log "$($tool.name) was installed but is not yet in PATH. Please restart your shell or log out/in to update PATH." "WARN"
+                        }
                     } else {
                         Log "$($tool.name) installation may have issues (exit code: $($process.ExitCode))" "WARN"
                     }
@@ -196,7 +214,7 @@ try {
         Log "Refreshing environment variables..." "INFO"
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
     } else {
-        Log "winget not available - skipping tool installation" "WARN"
+        Log "winget not available - skipping tool installation. Please install tools manually if needed (oh-my-posh, git, zoxide)." "WARN"
     }
 
     # Install profile for each PowerShell version
@@ -220,10 +238,11 @@ try {
         $profileSrc = "$PSScriptRoot\Microsoft.PowerShell_profile.ps1"
         if (Test-Path $profileSrc) {
             try {
-                # Use UTF8 encoding for PowerShell files to preserve emojis
+                # Use UTF8 encoding with BOM for PowerShell files to preserve emojis and ensure compatibility
                 $content = Get-Content $profileSrc -Raw -Encoding UTF8
-                [System.IO.File]::WriteAllText($targetProfile, $content, [System.Text.Encoding]::UTF8)
-                Log "Profile copied to $targetName successfully" "OK"
+                $utf8Bom = New-Object System.Text.UTF8Encoding($true)
+                [System.IO.File]::WriteAllText($targetProfile, $content, $utf8Bom)
+                Log "Profile copied to $targetName successfully (UTF8 BOM)" "OK"
             } catch {
                 Log "Failed to copy profile to $targetName - $($_.Exception.Message)" "ERROR"
                 continue
