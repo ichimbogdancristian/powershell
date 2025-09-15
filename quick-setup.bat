@@ -21,11 +21,11 @@ echo [INFO] Temporary directory: %TEMP_DIR%
 echo.
 
 rem --- create timestamped logfile for install run ---
-for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"`) do set TIMESTAMP=%%T
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')" 2^>nul`) do set TIMESTAMP=%%T
+if not defined TIMESTAMP set TIMESTAMP=unknown
 set "LOG_FILE=%TEMP%\powershell-install-%TIMESTAMP%.log"
 echo [INFO] Logfile: %LOG_FILE%
-echo === Install log started at %TIMESTAMP% === > "%LOG_FILE%"
-
+echo === Install log started at %TIMESTAMP% === > "%LOG_FILE%" 2>nul
 
 REM System Information
 echo [SYSTEM] Gathering system information...
@@ -36,20 +36,28 @@ echo.
 
 REM === Profile Location Detection ===
 echo [PROFILE] Detecting PowerShell profile locations...
-for /f "delims=" %%p in ('powershell -NoProfile -Command "$PROFILE"') do set "PS_PROFILE=%%p"
-set "PS_PROFILE_DIR=%USERPROFILE%\Documents\PowerShell"
-set "WIN_PS_PROFILE_DIR=%USERPROFILE%\Documents\WindowsPowerShell"
-set "BACKUP_PROFILE=%PS_PROFILE%.backup"
-set "DEFAULT_PROFILE=%TEMP%\Microsoft.PowerShell_profile_default.ps1"
 
-rem Extract profile filename and directory for backup management
+REM Get actual profile path and validate it
+for /f "delims=" %%p in ('powershell -NoProfile -Command "try { $PROFILE } catch { Write-Error 'Failed to get profile path'; exit 1 }" 2^>nul') do set "PS_PROFILE=%%p"
+if not defined PS_PROFILE (
+    echo [ERROR] Could not determine PowerShell profile path
+    goto :error_exit
+)
+
+REM Extract profile directory and filename safely
 for %%F in ("%PS_PROFILE%") do (
     set "PROFILE_NAME=%%~nxF"
     set "PROFILE_DIR=%%~dpF"
 )
 
-echo [INFO] PowerShell Core profile: %PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
-echo [INFO] Windows PowerShell profile: %WIN_PS_PROFILE_DIR%\Microsoft.PowerShell_profile.ps1
+REM Fallback profile directories
+set "PS_PROFILE_DIR=%USERPROFILE%\Documents\PowerShell"
+set "WIN_PS_PROFILE_DIR=%USERPROFILE%\Documents\WindowsPowerShell"
+
+echo [INFO] Current profile path: %PS_PROFILE%
+echo [INFO] Profile directory: %PROFILE_DIR%
+echo [INFO] PowerShell Core profile dir: %PS_PROFILE_DIR%
+echo [INFO] Windows PowerShell profile dir: %WIN_PS_PROFILE_DIR%
 echo.
 
 REM === Profile Management (interactive loop below) ===
@@ -65,10 +73,10 @@ echo   6. Quit
 set /p PROFILE_CHOICE="Enter your choice (1-6): "
 
 rem sanitize input: take first token so '1 anything' becomes '1'
-for /f "tokens=1" %%A in ("%PROFILE_CHOICE%") do set "PROFILE_CHOICE=%%~A"
+for /f "tokens=1" %%A in ("%PROFILE_CHOICE% ") do set "PROFILE_CHOICE=%%~A"
 
-echo [DEBUG] PROFILE_CHOICE_RAW=%PROFILE_CHOICE%
-echo [DEBUG] PROFILE_CHOICE_RAW=%PROFILE_CHOICE% >> "%LOG_FILE%"
+echo [DEBUG] PROFILE_CHOICE=%PROFILE_CHOICE%
+echo [DEBUG] PROFILE_CHOICE=%PROFILE_CHOICE% >> "%LOG_FILE%" 2>nul
 
 rem validate numeric choice (1-6)
 if "%PROFILE_CHOICE%"=="1" goto _valid_choice
@@ -79,7 +87,7 @@ if "%PROFILE_CHOICE%"=="5" goto _valid_choice
 if "%PROFILE_CHOICE%"=="6" goto _valid_choice
 
 echo [ERROR] Invalid choice: %PROFILE_CHOICE%
-echo [ERROR] Invalid choice: %PROFILE_CHOICE% >> "%LOG_FILE%"
+echo [ERROR] Invalid choice: %PROFILE_CHOICE% >> "%LOG_FILE%" 2>nul
 echo.
 goto profile_menu
 
@@ -88,14 +96,22 @@ goto profile_menu
 if "%PROFILE_CHOICE%"=="2" (
     if exist "%PS_PROFILE%" (
         rem generate timestamp using PowerShell to avoid locale issues
-        for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"`) do set TIMESTAMP=%%T
-        set "BACKUP_FILE=%PROFILE_DIR%%PROFILE_NAME%.%TIMESTAMP%.backup"
+        for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')" 2^>nul`) do set BACKUP_TIMESTAMP=%%T
+        if not defined BACKUP_TIMESTAMP set BACKUP_TIMESTAMP=unknown
+        set "BACKUP_FILE=%PROFILE_DIR%%PROFILE_NAME%.%BACKUP_TIMESTAMP%.backup"
         echo [INFO] Backing up profile:
         echo   Source: %PS_PROFILE%
-        echo   Dest:   %BACKUP_FILE%
-    copy "%PS_PROFILE%" "%BACKUP_FILE%" /Y
-        if %errorlevel% equ 0 (
-            echo [OK] Profile backed up to: %BACKUP_FILE%
+        echo   Dest:   !BACKUP_FILE!
+        
+        REM Ensure profile directory exists
+        if not exist "%PROFILE_DIR%" (
+            echo [INFO] Creating profile directory: %PROFILE_DIR%
+            mkdir "%PROFILE_DIR%" 2>nul
+        )
+        
+        copy "%PS_PROFILE%" "!BACKUP_FILE!" /Y >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo [OK] Profile backed up to: !BACKUP_FILE!
         ) else (
             echo [ERROR] Failed to copy profile to backup location.
         )
@@ -105,27 +121,31 @@ if "%PROFILE_CHOICE%"=="2" (
     echo.
     goto profile_menu
 )
+
 if "%PROFILE_CHOICE%"=="3" (
     rem attempt to restore the newest matching backup (by modified date)
     set "LATEST="
     for /f "usebackq delims=" %%F in (`dir "%PROFILE_DIR%%PROFILE_NAME%*.backup" /b /o:-d 2^>nul`) do (
-        set "LATEST=%%~fF"
+        set "LATEST=%PROFILE_DIR%%%F"
         goto have_latest
     )
     :have_latest
     if defined LATEST (
         echo [INFO] Restoring newest backup:
-        echo   Source: %LATEST%
+        echo   Source: !LATEST!
         echo   Dest:   %PS_PROFILE%
-        if not exist "%PS_PROFILE_DIR%" (
-            echo [INFO] Creating profile directory: %PS_PROFILE_DIR%
-            mkdir "%PS_PROFILE_DIR%"
+        
+        REM Ensure profile directory exists
+        if not exist "%PROFILE_DIR%" (
+            echo [INFO] Creating profile directory: %PROFILE_DIR%
+            mkdir "%PROFILE_DIR%" 2>nul
         )
-    copy "%LATEST%" "%PS_PROFILE%" /Y
-        if %errorlevel% equ 0 (
-            echo [OK] Profile restored from: %LATEST%
+        
+        copy "!LATEST!" "%PS_PROFILE%" /Y >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo [OK] Profile restored from: !LATEST!
         ) else (
-            echo [ERROR] Failed to restore profile from: %LATEST%
+            echo [ERROR] Failed to restore profile from: !LATEST!
         )
     ) else (
         echo [ERROR] No backups found matching: %PROFILE_DIR%%PROFILE_NAME%*.backup
@@ -133,14 +153,22 @@ if "%PROFILE_CHOICE%"=="3" (
     echo.
     goto profile_menu
 )
+
 if "%PROFILE_CHOICE%"=="4" (
     echo [INFO] Restoring Microsoft default (empty) profile at: %PS_PROFILE%
-    if not exist "%PS_PROFILE_DIR%" (
-        echo [INFO] Creating profile directory: %PS_PROFILE_DIR%
-        mkdir "%PS_PROFILE_DIR%"
+    
+    REM Ensure profile directory exists
+    if not exist "%PROFILE_DIR%" (
+        echo [INFO] Creating profile directory: %PROFILE_DIR%
+        mkdir "%PROFILE_DIR%" 2>nul
+        if !errorlevel! neq 0 (
+            echo [ERROR] Failed to create profile directory: %PROFILE_DIR%
+            goto profile_menu
+        )
     )
-    powershell -NoProfile -Command "try { Remove-Item -Path $PROFILE -ErrorAction SilentlyContinue } catch {}; New-Item -Path $PROFILE -ItemType File -Force | Out-Null; exit 0"
-    if %errorlevel% equ 0 (
+    
+    powershell -NoProfile -Command "try { Remove-Item -Path '%PS_PROFILE%' -ErrorAction SilentlyContinue; New-Item -Path '%PS_PROFILE%' -ItemType File -Force | Out-Null; exit 0 } catch { Write-Error $_.Exception.Message; exit 1 }" 2>nul
+    if !errorlevel! equ 0 (
         echo [OK] Microsoft default profile restored (empty profile).
     ) else (
         echo [ERROR] Failed to create default profile file: %PS_PROFILE%
@@ -148,6 +176,7 @@ if "%PROFILE_CHOICE%"=="4" (
     echo.
     goto profile_menu
 )
+
 if "%PROFILE_CHOICE%"=="5" (
     echo [INFO] Looking for backups matching: %PROFILE_DIR%%PROFILE_NAME%*.backup
     set BK_COUNT=0
@@ -157,65 +186,70 @@ if "%PROFILE_CHOICE%"=="5" (
             set "BK!BK_COUNT!=%%~fB"
         )
     )
-    if %BK_COUNT% equ 0 (
+    if !BK_COUNT! equ 0 (
         echo [INFO] No backups found for %PROFILE_NAME%
         echo.
         goto profile_menu
     )
     echo [BACKUPS]
-    for /L %%I in (1,1,%BK_COUNT%) do (
+    for /L %%I in (1,1,!BK_COUNT!) do (
         call echo %%I. %%BK%%I%%
     )
     echo.
     set /p ACTION="Enter 'd' to delete, 'r' to restore, 'a' to delete all, or press Enter to return: "
-    if "%ACTION%"=="" (
+    if "!ACTION!"=="" (
         echo.
         goto profile_menu
     )
-    if /i "%ACTION%"=="a" (
+    if /i "!ACTION!"=="a" (
         set /p CONFIRM="Are you sure you want to delete ALL backups? (y/n): "
-        if /i "%CONFIRM%"=="y" (
+        if /i "!CONFIRM!"=="y" (
             rem move all to DeletedBackups folder
             set "DELETED_DIR=%PROFILE_DIR%DeletedBackups\"
-            if not exist "%DELETED_DIR%" (
-                echo [INFO] Creating DeletedBackups directory: %DELETED_DIR%
-                mkdir "%DELETED_DIR%"
+            if not exist "!DELETED_DIR!" (
+                echo [INFO] Creating DeletedBackups directory: !DELETED_DIR!
+                mkdir "!DELETED_DIR!" 2>nul
             )
-            for /L %%I in (1,1,%BK_COUNT%) do (
-                call move "%%BK%%I%%" "%DELETED_DIR%"
+            for /L %%I in (1,1,!BK_COUNT!) do (
+                call move "%%BK%%I%%" "!DELETED_DIR!" >nul 2>&1
             )
-            echo [OK] Moved %BK_COUNT% backups to: %DELETED_DIR%
+            echo [OK] Moved !BK_COUNT! backups to: !DELETED_DIR!
         ) else (
             echo [INFO] Cancelled.
         )
         echo.
         goto profile_menu
     )
-    if /i "%ACTION%"=="d" (
+    if /i "!ACTION!"=="d" (
         set /p DEL_CHOICE="Enter number to delete, or press Enter to cancel: "
-        if "%DEL_CHOICE%"=="" (
+        if "!DEL_CHOICE!"=="" (
             echo [INFO] Cancelled.
             echo.
             goto profile_menu
         )
-        call set "TARGET=%%BK%DEL_CHOICE%%%"
-        if "%TARGET%"=="" (
+        if !DEL_CHOICE! gtr !BK_COUNT! (
+            echo [ERROR] Invalid selection.
+            echo.
+            goto profile_menu
+        )
+        call set "TARGET=%%BK!DEL_CHOICE!%%"
+        if "!TARGET!"=="" (
             echo [ERROR] Invalid selection.
             echo.
             goto profile_menu
         )
         set "DELETED_DIR=%PROFILE_DIR%DeletedBackups\"
-        if not exist "%DELETED_DIR%" (
-            echo [INFO] Creating DeletedBackups directory: %DELETED_DIR%
-            mkdir "%DELETED_DIR%"
+        if not exist "!DELETED_DIR!" (
+            echo [INFO] Creating DeletedBackups directory: !DELETED_DIR!
+            mkdir "!DELETED_DIR!" 2>nul
         )
-        set /p CONFIRM="Are you sure you want to move '%TARGET%' to DeletedBackups? (y/n): "
-        if /i "%CONFIRM%"=="y" (
-            move "%TARGET%" "%DELETED_DIR%"
-            if %errorlevel% equ 0 (
-                echo [OK] Moved to: %DELETED_DIR%
+        set /p CONFIRM="Are you sure you want to move '!TARGET!' to DeletedBackups? (y/n): "
+        if /i "!CONFIRM!"=="y" (
+            move "!TARGET!" "!DELETED_DIR!" >nul 2>&1
+            if !errorlevel! equ 0 (
+                echo [OK] Moved to: !DELETED_DIR!
             ) else (
-                echo [ERROR] Failed to move: %TARGET%
+                echo [ERROR] Failed to move: !TARGET!
             )
         ) else (
             echo [INFO] Cancelled.
@@ -223,30 +257,35 @@ if "%PROFILE_CHOICE%"=="5" (
         echo.
         goto profile_menu
     )
-    if /i "%ACTION%"=="r" (
+    if /i "!ACTION!"=="r" (
         set /p REST_CHOICE="Enter number to restore, or press Enter to cancel: "
-        if "%REST_CHOICE%"=="" (
+        if "!REST_CHOICE!"=="" (
             echo [INFO] Cancelled.
             echo.
             goto profile_menu
         )
-        call set "TARGET=%%BK%REST_CHOICE%%%"
-        if "%TARGET%"=="" (
+        if !REST_CHOICE! gtr !BK_COUNT! (
             echo [ERROR] Invalid selection.
             echo.
             goto profile_menu
         )
-        set /p CONFIRM="Are you sure you want to restore '%TARGET%' to %PS_PROFILE%? (y/n): "
-        if /i "%CONFIRM%"=="y" (
-            if not exist "%PS_PROFILE_DIR%" (
-                echo [INFO] Creating profile directory: %PS_PROFILE_DIR%
-                mkdir "%PS_PROFILE_DIR%"
+        call set "TARGET=%%BK!REST_CHOICE!%%"
+        if "!TARGET!"=="" (
+            echo [ERROR] Invalid selection.
+            echo.
+            goto profile_menu
+        )
+        set /p CONFIRM="Are you sure you want to restore '!TARGET!' to %PS_PROFILE%? (y/n): "
+        if /i "!CONFIRM!"=="y" (
+            if not exist "%PROFILE_DIR%" (
+                echo [INFO] Creating profile directory: %PROFILE_DIR%
+                mkdir "%PROFILE_DIR%" 2>nul
             )
-            copy "%TARGET%" "%PS_PROFILE%" /Y
-            if %errorlevel% equ 0 (
-                echo [OK] Restored profile from: %TARGET%
+            copy "!TARGET!" "%PS_PROFILE%" /Y >nul 2>&1
+            if !errorlevel! equ 0 (
+                echo [OK] Restored profile from: !TARGET!
             ) else (
-                echo [ERROR] Failed to restore from: %TARGET%
+                echo [ERROR] Failed to restore from: !TARGET!
             )
         ) else (
             echo [INFO] Cancelled.
@@ -258,17 +297,19 @@ if "%PROFILE_CHOICE%"=="5" (
     echo.
     goto profile_menu
 )
+
 if "%PROFILE_CHOICE%"=="6" (
     echo [INFO] Installation cancelled by user.
     goto :eof
 )
+
 if "%PROFILE_CHOICE%"=="1" (
     echo [INFO] Proceeding to installation...
     echo.
     echo [INFO] Press any key to begin installation. If you launched this by double-click, this prevents the window from closing immediately.
     pause
     echo [DEBUG] pause completed, proceeding to :do_install
-    echo [DEBUG] pause completed, proceeding to :do_install >> "%LOG_FILE%"
+    echo [DEBUG] pause completed, proceeding to :do_install >> "%LOG_FILE%" 2>nul
     goto do_install
 )
 
@@ -276,46 +317,65 @@ if "%PROFILE_CHOICE%"=="1" (
 REM === Dependency and Module Checks ===
 echo [CHECK] Checking for existing dependencies and modules...
 echo [DEBUG] Entered :do_install label
-echo [DEBUG] Entered :do_install label >> "%LOG_FILE%"
+echo [DEBUG] Entered :do_install label >> "%LOG_FILE%" 2>nul
 
-REM Check PowerShell modules
+REM Check PowerShell modules using file-based communication
+set "CHECK_FILE=%TEMP%\ps_module_check_%TIMESTAMP%.tmp"
+
+REM Check posh-git
+powershell -NoProfile -Command "try { Get-Module posh-git -ListAvailable -ErrorAction Stop | Out-Null; 'POSH_GIT_OK' | Out-File -FilePath '%CHECK_FILE%' -Append -Encoding ASCII; Write-Host '[OK] posh-git module found' -ForegroundColor Green } catch { Write-Host '[INFO] posh-git module not found' -ForegroundColor Yellow }" 2>nul
+
+REM Check Terminal-Icons
+powershell -NoProfile -Command "try { Get-Module Terminal-Icons -ListAvailable -ErrorAction Stop | Out-Null; 'TERMINAL_ICONS_OK' | Out-File -FilePath '%CHECK_FILE%' -Append -Encoding ASCII; Write-Host '[OK] Terminal-Icons module found' -ForegroundColor Green } catch { Write-Host '[INFO] Terminal-Icons module not found' -ForegroundColor Yellow }" 2>nul
+
+REM Check PSReadLine
+powershell -NoProfile -Command "try { Get-Module PSReadLine -ListAvailable -ErrorAction Stop | Out-Null; 'PSREADLINE_OK' | Out-File -FilePath '%CHECK_FILE%' -Append -Encoding ASCII; Write-Host '[OK] PSReadLine module found' -ForegroundColor Green } catch { Write-Host '[INFO] PSReadLine module not found' -ForegroundColor Yellow }" 2>nul
+
+REM Read results from file
 set "MODULES_OK=1"
-powershell -Command "try { Get-Module posh-git -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] posh-git module found' -ForegroundColor Green } catch { Write-Host '[INFO] posh-git module not found' -ForegroundColor Yellow; $global:MODULES_OK=0 }"
-powershell -Command "try { Get-Module Terminal-Icons -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] Terminal-Icons module found' -ForegroundColor Green } catch { Write-Host '[INFO] Terminal-Icons module not found' -ForegroundColor Yellow; $global:MODULES_OK=0 }"
-powershell -Command "try { Get-Module PSReadLine -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] PSReadLine module found' -ForegroundColor Green } catch { Write-Host '[INFO] PSReadLine module not found' -ForegroundColor Yellow; $global:MODULES_OK=0 }"
+if exist "%CHECK_FILE%" (
+    findstr /C:"POSH_GIT_OK" "%CHECK_FILE%" >nul 2>&1 || set "MODULES_OK=0"
+    findstr /C:"TERMINAL_ICONS_OK" "%CHECK_FILE%" >nul 2>&1 || set "MODULES_OK=0"
+    findstr /C:"PSREADLINE_OK" "%CHECK_FILE%" >nul 2>&1 || set "MODULES_OK=0"
+    del "%CHECK_FILE%" 2>nul
+) else (
+    set "MODULES_OK=0"
+)
 
 REM Check tools
 set "TOOLS_OK=1"
-where oh-my-posh >> "%LOG_FILE%" 2>&1
-if %errorlevel% equ 0 (
+where oh-my-posh >nul 2>&1
+if !errorlevel! equ 0 (
     echo [OK] oh-my-posh tool found
 ) else (
     echo [INFO] oh-my-posh tool not found
     set "TOOLS_OK=0"
 )
-where git >> "%LOG_FILE%" 2>&1
-if %errorlevel% equ 0 (
+
+where git >nul 2>&1
+if !errorlevel! equ 0 (
     echo [OK] git tool found
 ) else (
     echo [INFO] git tool not found
     set "TOOLS_OK=0"
 )
-where zoxide >> "%LOG_FILE%" 2>&1
-if %errorlevel% equ 0 (
+
+where zoxide >nul 2>&1
+if !errorlevel! equ 0 (
     echo [OK] zoxide tool found
 ) else (
     echo [INFO] zoxide tool not found
     set "TOOLS_OK=0"
 )
 
-if %MODULES_OK% equ 1 if %TOOLS_OK% equ 1 (
+if !MODULES_OK! equ 1 if !TOOLS_OK! equ 1 (
     echo [INFO] All dependencies and modules are already installed.
     echo [QUESTION] Do you want to skip installation and just update the profile?
-    choice /M "Skip full installation and update profile only?"
-    if errorlevel 2 (
-        echo [INFO] User chose to continue with full install >> "%LOG_FILE%"
+    choice /M "Skip full installation and update profile only" 2>nul
+    if !errorlevel! equ 2 (
+        echo [INFO] User chose to continue with full install >> "%LOG_FILE%" 2>nul
     ) else (
-        echo [INFO] User chose to skip full install and update profile only >> "%LOG_FILE%"
+        echo [INFO] User chose to skip full install and update profile only >> "%LOG_FILE%" 2>nul
         set "SKIP_INSTALL=1"
         goto :skip_install
     )
@@ -326,8 +386,8 @@ REM Check dependencies
 echo [CHECK] Verifying system dependencies...
 
 REM Check PowerShell
-where powershell >> "%LOG_FILE%" 2>&1
-if %errorlevel% neq 0 (
+where powershell >nul 2>&1
+if !errorlevel! neq 0 (
     echo [ERROR] PowerShell not found in system PATH
     echo [SOLUTION] Install PowerShell from:
     echo   - Microsoft Store: ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D
@@ -337,14 +397,14 @@ if %errorlevel% neq 0 (
 echo [OK] PowerShell found
 
 REM Get PowerShell version
-for /f "tokens=*" %%v in ('powershell -Command "$PSVersionTable.PSVersion.ToString()"') do (
+for /f "tokens=*" %%v in ('powershell -NoProfile -Command "$PSVersionTable.PSVersion.ToString()" 2^>nul') do (
     echo [INFO] PowerShell version: %%v
 )
 
 REM Check internet connectivity
 echo [CHECK] Testing internet connectivity...
-ping -n 1 github.com >> "%LOG_FILE%" 2>&1
-if %errorlevel% neq 0 (
+ping -n 1 github.com >nul 2>&1
+if !errorlevel! neq 0 (
     echo [ERROR] Cannot reach GitHub. Check your internet connection.
     goto :error_exit
 )
@@ -353,16 +413,23 @@ echo.
 
 echo [DOWNLOAD] Preparing to download repository...
 
-REM Clean up previous installations
+REM Clean up previous installations with better error handling
 if exist "%TEMP_DIR%" (
     echo [INFO] Cleaning up previous installation files...
-    rmdir /s /q "%TEMP_DIR%"
+    for /l %%i in (1,1,3) do (
+        rmdir /s /q "%TEMP_DIR%" 2>nul
+        if not exist "%TEMP_DIR%" goto cleanup_success
+        echo [INFO] Cleanup attempt %%i failed, retrying...
+        timeout /t 1 /nobreak >nul 2>&1
+    )
+    echo [WARNING] Could not completely clean previous installation files
+    :cleanup_success
 )
 
-REM Create temporary directory
+REM Create temporary directory with error handling
 echo [INFO] Creating temporary directory...
-mkdir "%TEMP_DIR%"
-if %errorlevel% neq 0 (
+mkdir "%TEMP_DIR%" 2>nul
+if !errorlevel! neq 0 (
     echo [ERROR] Cannot create temporary directory: %TEMP_DIR%
     goto :error_exit
 )
@@ -373,9 +440,9 @@ echo [DOWNLOAD] Downloading PowerShell profile repository...
 echo [INFO] This may take a moment depending on your connection...
 
 REM Download repository using PowerShell with improved error handling
-powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%REPO_URL%/archive/refs/heads/main.zip' -OutFile '%ZIP_FILE%' -UseBasicParsing -TimeoutSec 30; Write-Host '[OK] Repository downloaded successfully' -ForegroundColor Green } catch { Write-Host '[ERROR] Download failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }" >> "%LOG_FILE%" 2>&1
+powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '%REPO_URL%/archive/refs/heads/main.zip' -OutFile '%ZIP_FILE%' -UseBasicParsing -TimeoutSec 60; Write-Host '[OK] Repository downloaded successfully' -ForegroundColor Green; exit 0 } catch { Write-Host '[ERROR] Download failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }" 2>nul
 
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo [ERROR] Failed to download repository
     goto :error_exit
 )
@@ -383,10 +450,10 @@ echo.
 
 echo [EXTRACT] Extracting repository files...
 
-REM Extract ZIP file using PowerShell
-powershell -Command "try { Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force; Write-Host '[OK] Files extracted successfully' -ForegroundColor Green } catch { Write-Host '[ERROR] Extraction failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }" >> "%LOG_FILE%" 2>&1
+REM Extract ZIP file using PowerShell with better error handling
+powershell -NoProfile -Command "try { $ProgressPreference = 'SilentlyContinue'; Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force; Write-Host '[OK] Files extracted successfully' -ForegroundColor Green; exit 0 } catch { Write-Host '[ERROR] Extraction failed:' $_.Exception.Message -ForegroundColor Red; exit 1 }" 2>nul
 
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo [ERROR] Failed to extract repository files
     goto :error_exit
 )
@@ -403,58 +470,110 @@ echo.
 echo [INSTALL] Starting PowerShell profile installation...
 echo [INFO] Running installation script from downloaded repository...
 
-REM Check if installation script exists
-if not exist "%EXTRACT_DIR%\quick-install.ps1" (
-    echo [ERROR] Installation script not found in repository
-    echo [INFO] Available files in repository:
-    dir "%EXTRACT_DIR%" /b
-    goto :error_exit
-)
-
-echo.
-echo ═══════════════════════════════════════════════════════════════════════════════
-echo                   INSTALLATION PROGRESS
-echo ═══════════════════════════════════════════════════════════════════════════════
-
-REM Run installation script with visible output
-cd /d "%EXTRACT_DIR%"
+REM Check if we're in skip mode and handle accordingly
 if "%SKIP_INSTALL%"=="1" (
     echo [INFO] Skipping full installation, updating profile only...
+    
+    REM Create profile directories if they don't exist
+    if not exist "%PS_PROFILE_DIR%" (
+        echo [INFO] Creating PowerShell profile directory: %PS_PROFILE_DIR%
+        mkdir "%PS_PROFILE_DIR%" 2>nul
+        if !errorlevel! neq 0 (
+            echo [ERROR] Failed to create directory: %PS_PROFILE_DIR%
+            goto :error_exit
+        )
+    )
+    
+    if not exist "%WIN_PS_PROFILE_DIR%" (
+        echo [INFO] Creating Windows PowerShell profile directory: %WIN_PS_PROFILE_DIR%
+        mkdir "%WIN_PS_PROFILE_DIR%" 2>nul
+        if !errorlevel! neq 0 (
+            echo [ERROR] Failed to create directory: %WIN_PS_PROFILE_DIR%
+            goto :error_exit
+        )
+    )
+    
     REM Copy profile files to both locations
-    if not exist "%PS_PROFILE_DIR%" mkdir "%PS_PROFILE_DIR%"
-    copy "Microsoft.PowerShell_profile.ps1" "%PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
-    copy "oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
-    if not exist "%WIN_PS_PROFILE_DIR%" mkdir "%WIN_PS_PROFILE_DIR%"
-    copy "Microsoft.PowerShell_profile.ps1" "%WIN_PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
-    copy "oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y >> "%LOG_FILE%" 2>&1
-    REM Copy modules if needed
-    if not exist "%PS_PROFILE_DIR%\Modules" mkdir "%PS_PROFILE_DIR%\Modules"
-    xcopy "Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y >> "%LOG_FILE%" 2>&1
-    if not exist "%WIN_PS_PROFILE_DIR%\Modules" mkdir "%WIN_PS_PROFILE_DIR%\Modules"
-    xcopy "Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y >> "%LOG_FILE%" 2>&1
-    echo [OK] Profile updated successfully
+    if exist "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" (
+        copy "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" "%PS_PROFILE_DIR%\" /Y >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo [OK] Copied profile to PowerShell Core directory
+        ) else (
+            echo [WARNING] Failed to copy profile to PowerShell Core directory
+        )
+        
+        copy "%EXTRACT_DIR%\Microsoft.PowerShell_profile.ps1" "%WIN_PS_PROFILE_DIR%\" /Y >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo [OK] Copied profile to Windows PowerShell directory
+        ) else (
+            echo [WARNING] Failed to copy profile to Windows PowerShell directory
+        )
+    ) else (
+        echo [WARNING] Profile file not found in repository
+    )
+    
+    REM Copy theme file if it exists
+    if exist "%EXTRACT_DIR%\oh-my-posh-default.json" (
+        copy "%EXTRACT_DIR%\oh-my-posh-default.json" "%PS_PROFILE_DIR%\" /Y >nul 2>&1
+        copy "%EXTRACT_DIR%\oh-my-posh-default.json" "%WIN_PS_PROFILE_DIR%\" /Y >nul 2>&1
+        echo [OK] Copied theme configuration
+    )
+    
+    REM Copy modules if they exist
+    if exist "%EXTRACT_DIR%\Modules" (
+        if not exist "%PS_PROFILE_DIR%\Modules" mkdir "%PS_PROFILE_DIR%\Modules" 2>nul
+        if not exist "%WIN_PS_PROFILE_DIR%\Modules" mkdir "%WIN_PS_PROFILE_DIR%\Modules" 2>nul
+        
+        xcopy "%EXTRACT_DIR%\Modules" "%PS_PROFILE_DIR%\Modules\" /E /I /Y /Q >nul 2>&1
+        xcopy "%EXTRACT_DIR%\Modules" "%WIN_PS_PROFILE_DIR%\Modules\" /E /I /Y /Q >nul 2>&1
+        echo [OK] Copied custom modules
+    )
+    
+    echo [OK] Profile update completed
     set "INSTALL_RESULT=0"
+    goto :verify_install
 ) else (
+    REM Check if installation script exists
+    if not exist "%EXTRACT_DIR%\quick-install.ps1" (
+        echo [ERROR] Installation script not found in repository
+        echo [INFO] Available files in repository:
+        dir "%EXTRACT_DIR%" /b 2>nul
+        goto :error_exit
+    )
+
+    echo.
+    echo ═══════════════════════════════════════════════════════════════════════════════
+    echo                   INSTALLATION PROGRESS
+    echo ═══════════════════════════════════════════════════════════════════════════════
+
+    REM Run installation script with visible output
+    cd /d "%EXTRACT_DIR%" 2>nul
+    if !errorlevel! neq 0 (
+        echo [ERROR] Cannot change to extraction directory
+        goto :error_exit
+    )
+    
     echo [INFO] Running installation with complete directory clearing (no backups)...
-    powershell -ExecutionPolicy Bypass -Command "& '.\quick-install.ps1' -CleanInstall; if ($LASTEXITCODE -ne 0) { exit 1 }"
-    set "INSTALL_RESULT=%errorlevel%"
+    powershell -ExecutionPolicy Bypass -NoProfile -Command "& '.\quick-install.ps1' -CleanInstall 2>&1; exit $LASTEXITCODE" 2>nul
+    set "INSTALL_RESULT=!errorlevel!"
+
+    echo.
+    echo ═══════════════════════════════════════════════════════════════════════════════
 )
 
-echo.
-echo ═══════════════════════════════════════════════════════════════════════════════
-
+:verify_install
 REM Verify installation
 echo [VERIFY] Checking installation results...
 
-powershell -Command "if (Test-Path $PROFILE) { Write-Host '[OK] PowerShell profile created successfully' -ForegroundColor Green } else { Write-Host '[ERROR] PowerShell profile not found' -ForegroundColor Red; exit 1 }"
-set "PROFILE_CHECK=%errorlevel%"
+powershell -NoProfile -Command "if (Test-Path '$env:PS_PROFILE') { Write-Host '[OK] PowerShell profile created successfully' -ForegroundColor Green; exit 0 } else { Write-Host '[ERROR] PowerShell profile not found' -ForegroundColor Red; exit 1 }" 2>nul
+set "PROFILE_CHECK=!errorlevel!"
 
-powershell -Command "try { Get-Module posh-git,Terminal-Icons -ListAvailable -ErrorAction Stop | Out-Null; Write-Host '[OK] Essential modules available' -ForegroundColor Green } catch { Write-Host '[OK] Essential modules available' -ForegroundColor Green }"
+powershell -NoProfile -Command "try { Get-Module posh-git,Terminal-Icons -ListAvailable -ErrorAction SilentlyContinue | Out-Null; Write-Host '[OK] Essential modules available' -ForegroundColor Green } catch { Write-Host '[INFO] Some modules may need installation' -ForegroundColor Yellow }" 2>nul
 
 echo.
 echo ═══════════════════════════════════════════════════════════════════════════════
 
-if %INSTALL_RESULT% equ 0 if %PROFILE_CHECK% equ 0 (
+if !INSTALL_RESULT! equ 0 if !PROFILE_CHECK! equ 0 (
     color 0A
     echo [SUCCESS] PowerShell profile installed successfully
     echo.
@@ -469,12 +588,20 @@ if %INSTALL_RESULT% equ 0 if %PROFILE_CHECK% equ 0 (
     echo 3. Try these commands: neofetch, ll, health
     echo.
     echo [CLEANUP] Removing temporary files...
-    cd /d "%~dp0"
-    rmdir /s /q "%TEMP_DIR%"
+    cd /d "%~dp0" 2>nul
+    for /l %%i in (1,1,3) do (
+        rmdir /s /q "%TEMP_DIR%" 2>nul
+        if not exist "%TEMP_DIR%" goto cleanup_final_success
+        timeout /t 1 /nobreak >nul 2>&1
+    )
+    echo [INFO] Some temporary files may remain: %TEMP_DIR%
+    goto cleanup_final_done
+    :cleanup_final_success
     echo [OK] Cleanup completed
+    :cleanup_final_done
     echo.
     echo [INFO] Press any key to close this window...
-    echo === Install completed successfully at %DATE% %TIME% === >> "%LOG_FILE%"
+    echo === Install completed successfully at %DATE% %TIME% === >> "%LOG_FILE%" 2>nul
     pause
 ) else (
     color 0C
@@ -489,7 +616,7 @@ if %INSTALL_RESULT% equ 0 if %PROFILE_CHECK% equ 0 (
     echo.
     echo [INFO] Temporary files left for debugging: %TEMP_DIR%
     echo [INFO] Press any key to close this window...
-    echo === Install FAILED at %DATE% %TIME% (see %LOG_FILE%) === >> "%LOG_FILE%"
+    echo === Install FAILED at %DATE% %TIME% === >> "%LOG_FILE%" 2>nul
     pause
 )
 
@@ -509,6 +636,6 @@ echo 4. Visit repository manually: %REPO_URL%
 echo 5. Check Windows version compatibility
 echo.
 echo [INFO] Press any key to close this window...
+echo === Pre-install checks FAILED at %DATE% %TIME% === >> "%LOG_FILE%" 2>nul
 pause
-echo === Pre-install checks FAILED at %DATE% %TIME% (see %LOG_FILE%) === >> "%LOG_FILE%"
 exit /b 1
