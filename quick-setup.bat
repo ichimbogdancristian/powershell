@@ -134,65 +134,23 @@ exit /b 0
 
 :skip_subroutines
 
-REM === Main Interactive Profile Menu ===
-:profile_menu
-echo [PROFILE] Choose an option before continuing:
-echo   1. Proceed to installation
-echo   2. Backup current profile
-echo   3. Restore previous backup
-echo   4. Create Microsoft default profile
-echo   5. Manage backups
-echo   6. Quit
+REM === Automated Profile Management ===
+echo [PROFILE] Preparing for unattended installation...
+
+REM Automatically backup existing profile if it exists
+if exist "%PS_PROFILE%" (
+    echo [AUTO] Backing up existing profile...
+    call :backup_profile
+    if errorlevel 1 (
+        echo [ERROR] Failed to backup existing profile
+        goto :error_exit
+    )
+) else (
+    echo [INFO] No existing profile to backup
+)
+
+echo [AUTO] Proceeding with installation...
 echo.
-set /p PROFILE_CHOICE="Enter your choice (1-6): "
-
-REM Sanitize input
-for /f "tokens=1" %%A in ("%PROFILE_CHOICE% ") do set "PROFILE_CHOICE=%%~A"
-
-REM Validate choice
-if "%PROFILE_CHOICE%"=="1" goto :start_installation
-if "%PROFILE_CHOICE%"=="2" goto :do_backup
-if "%PROFILE_CHOICE%"=="3" goto :do_restore
-if "%PROFILE_CHOICE%"=="4" goto :do_default
-if "%PROFILE_CHOICE%"=="5" goto :manage_backups
-if "%PROFILE_CHOICE%"=="6" goto :user_exit
-
-echo [ERROR] Invalid choice: %PROFILE_CHOICE%
-echo.
-goto :profile_menu
-
-:do_backup
-call :backup_profile
-echo.
-goto :profile_menu
-
-:do_restore
-call :restore_latest_backup
-if errorlevel 1 echo [ERROR] Restore failed
-echo.
-goto :profile_menu
-
-:do_default
-call :create_default_profile
-if errorlevel 1 echo [ERROR] Failed to create default profile
-echo.
-goto :profile_menu
-
-:manage_backups
-echo [INFO] Backup management not fully implemented in this version
-echo [INFO] Backups are stored in: %PROFILE_DIR%
-echo [INFO] Look for files matching: %PROFILE_NAME%*.backup
-echo.
-goto :profile_menu
-
-:user_exit
-echo [INFO] Installation cancelled by user.
-goto :cleanup_exit
-
-:start_installation
-echo [INFO] Proceeding to installation...
-echo.
-pause
 
 REM === Dependency Checks ===
 echo [CHECK] Checking system dependencies...
@@ -218,24 +176,17 @@ echo [INFO] Current execution policy: %EXEC_POLICY%
 
 if /i "%EXEC_POLICY%"=="Restricted" (
     echo [WARNING] Execution policy is Restricted. PowerShell scripts cannot run.
-    echo [SOLUTION] Run this command in PowerShell as Administrator:
-    echo            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-    echo.
-    echo [PROMPT] Would you like me to attempt to fix this automatically? (y/n)
-    set /p FIX_POLICY="Choice: "
-    if /i "!FIX_POLICY!"=="y" (
-        echo [INFO] Attempting to set execution policy...
-        powershell -NoProfile -Command "try { Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Write-Host '[OK] Execution policy updated' -ForegroundColor Green } catch { Write-Host '[ERROR] Failed to update execution policy. Run as Administrator.' -ForegroundColor Red; exit 1 }"
-        if errorlevel 1 (
-            echo [ERROR] Could not update execution policy. Please run as Administrator or set manually.
-            goto :error_exit
-        )
-    ) else (
-        echo [ERROR] Cannot proceed with Restricted execution policy.
+    echo [AUTO] Attempting to fix execution policy automatically...
+    powershell -NoProfile -Command "try { Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Write-Host '[OK] Execution policy updated to RemoteSigned' -ForegroundColor Green } catch { Write-Host '[ERROR] Failed to update execution policy. Manual intervention required.' -ForegroundColor Red; exit 1 }"
+    if errorlevel 1 (
+        echo [ERROR] Could not update execution policy automatically.
+        echo [SOLUTION] Please run this command manually as Administrator:
+        echo            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
         goto :error_exit
     )
+) else (
+    echo [OK] Execution policy is compatible (%EXEC_POLICY%)
 )
-echo [OK] Execution policy is compatible
 echo.
 
 REM Check internet connectivity
@@ -504,11 +455,14 @@ echo ✓ Execution policy verified
 echo ✓ Theme and modules copied
 echo.
 echo [NEXT STEPS]
-echo 1. Close this window
+echo 1. Close this window (or it will auto-close in 10 seconds)
 echo 2. Open a new PowerShell window  
 echo 3. The enhanced profile should load automatically
 echo 4. Try commands like: Get-Help, ls, cd
 echo.
+
+echo [AUTO] Auto-closing in 10 seconds...
+timeout /t 10 /nobreak >nul 2>&1
 
 goto :cleanup_exit
 
@@ -546,6 +500,6 @@ echo === Installation completed successfully at %DATE% %TIME% === >> "%LOG_FILE%
 
 :exit_pause
 echo.
-echo [INFO] Press any key to close this window...
-pause >nul
+echo [AUTO] Installation completed. Window will close automatically.
+timeout /t 3 /nobreak >nul 2>&1
 exit /b 0
