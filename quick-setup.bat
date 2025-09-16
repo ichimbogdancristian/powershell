@@ -211,6 +211,33 @@ for /f "tokens=*" %%v in ('powershell -NoProfile -Command "$PSVersionTable.PSVer
     echo [INFO] PowerShell version: %%v
 )
 
+REM === SECURITY CHECK - Execution Policy ===
+echo [SECURITY] Checking PowerShell execution policy...
+for /f "tokens=*" %%p in ('powershell -NoProfile -Command "Get-ExecutionPolicy" 2^>nul') do set "EXEC_POLICY=%%p"
+echo [INFO] Current execution policy: %EXEC_POLICY%
+
+if /i "%EXEC_POLICY%"=="Restricted" (
+    echo [WARNING] Execution policy is Restricted. PowerShell scripts cannot run.
+    echo [SOLUTION] Run this command in PowerShell as Administrator:
+    echo            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    echo.
+    echo [PROMPT] Would you like me to attempt to fix this automatically? (y/n)
+    set /p FIX_POLICY="Choice: "
+    if /i "!FIX_POLICY!"=="y" (
+        echo [INFO] Attempting to set execution policy...
+        powershell -NoProfile -Command "try { Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Write-Host '[OK] Execution policy updated' -ForegroundColor Green } catch { Write-Host '[ERROR] Failed to update execution policy. Run as Administrator.' -ForegroundColor Red; exit 1 }"
+        if errorlevel 1 (
+            echo [ERROR] Could not update execution policy. Please run as Administrator or set manually.
+            goto :error_exit
+        )
+    ) else (
+        echo [ERROR] Cannot proceed with Restricted execution policy.
+        goto :error_exit
+    )
+)
+echo [OK] Execution policy is compatible
+echo.
+
 REM Check internet connectivity
 echo [CHECK] Testing internet connectivity...
 ping -n 1 github.com >nul 2>&1
@@ -221,21 +248,65 @@ if errorlevel 1 (
 echo [OK] Internet connectivity verified
 echo.
 
-REM === Module Installation ===
-echo [MODULES] Installing required PowerShell modules...
+REM === Enhanced Module Installation ===
+echo [MODULES] Checking and installing required PowerShell modules...
 
-for %%M in ("PSReadLine" "posh-git" "Terminal-Icons") do (
-    echo [INFO] Checking module: %%~M
-    powershell -NoProfile -Command "if (-not (Get-Module %%~M -ListAvailable -ErrorAction SilentlyContinue)) { Write-Host '  Installing %%~M...'; try { Install-Module %%~M -Repository PSGallery -Force -AllowClobber -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop; Write-Host '  [OK] %%~M installed' -ForegroundColor Green } catch { Write-Host '  [ERROR] Failed to install %%~M' -ForegroundColor Red; exit 1 } } else { Write-Host '  [OK] %%~M already available' -ForegroundColor Green }"
-    if errorlevel 1 (
-        echo [WARNING] Module %%~M installation failed, continuing...
-    )
+powershell -NoProfile -Command "
+$modules = @('PSReadLine', 'posh-git', 'Terminal-Icons')
+$failed = @()
+
+foreach ($module in $modules) {
+    try {
+        Write-Host '[CHECK] Checking module:' $module -ForegroundColor Cyan
+        
+        $installed = Get-Module $module -ListAvailable -ErrorAction SilentlyContinue
+        if ($installed) {
+            $version = ($installed | Sort-Object Version -Descending | Select-Object -First 1).Version
+            Write-Host '  [OK]' $module '(' $version ') already installed' -ForegroundColor Green
+        } else {
+            Write-Host '  [INSTALL] Installing' $module '...' -ForegroundColor Yellow
+            
+            # Install with comprehensive error handling
+            Install-Module $module -Repository PSGallery -Force -AllowClobber -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+            
+            # Verify installation
+            $newInstall = Get-Module $module -ListAvailable -ErrorAction SilentlyContinue
+            if ($newInstall) {
+                $version = ($newInstall | Sort-Object Version -Descending | Select-Object -First 1).Version
+                Write-Host '  [OK]' $module '(' $version ') installed successfully' -ForegroundColor Green
+            } else {
+                throw 'Installation verification failed'
+            }
+        }
+    } catch {
+        Write-Host '  [ERROR]' $module 'installation failed:' $_.Exception.Message -ForegroundColor Red
+        $failed += $module
+    }
+}
+
+if ($failed.Count -gt 0) {
+    Write-Host '[WARNING] Failed modules:' ($failed -join ', ') -ForegroundColor Yellow
+    Write-Host '[INFO] You may need to install these manually later' -ForegroundColor Yellow
+    exit 2
+} else {
+    Write-Host '[SUCCESS] All required modules are available' -ForegroundColor Green
+    exit 0
+}
+"
+
+set MODULE_RESULT=%errorlevel%
+if %MODULE_RESULT%==1 (
+    echo [ERROR] Critical module installation failure
+    goto :error_exit
+) else if %MODULE_RESULT%==2 (
+    echo [WARNING] Some modules failed to install, but continuing...
 )
 echo.
 
-REM === Tool Installation ===
-echo [TOOLS] Installing required tools with winget...
+REM === Enhanced Tool Installation ===
+echo [TOOLS] Checking and installing required tools with winget...
 
+REM Check if winget is available
 where winget >nul 2>&1
 if errorlevel 1 (
     echo [WARN] winget not found. Tools must be installed manually:
@@ -243,27 +314,61 @@ if errorlevel 1 (
     echo   - git: https://git-scm.com/
     echo   - zoxide: https://github.com/ajeetdsouza/zoxide
 ) else (
-    for %%T in ("JanDeDobbeleer.OhMyPosh" "Git.Git" "ajeetdsouza.zoxide") do (
-        set "TOOL_ID=%%~T"
-        if "%%~T"=="JanDeDobbeleer.OhMyPosh" set "TOOL_EXE=oh-my-posh"
-        if "%%~T"=="Git.Git" set "TOOL_EXE=git"
-        if "%%~T"=="ajeetdsouza.zoxide" set "TOOL_EXE=zoxide"
-        
-        where !TOOL_EXE! >nul 2>&1
-        if errorlevel 1 (
-            echo [INFO] Installing !TOOL_EXE!...
-            winget install %%~T --silent --accept-source-agreements --accept-package-agreements >nul 2>&1
-            if errorlevel 1 (
-                echo [WARN] Failed to install !TOOL_EXE! via winget
-            ) else (
-                echo [OK] !TOOL_EXE! installed
-            )
-        ) else (
-            echo [OK] !TOOL_EXE! already available
-        )
-    )
+    echo [INFO] winget found, checking tools...
+    
+    REM Enhanced tool checking and installation
+    call :check_and_install_tool "oh-my-posh" "JanDeDobbeleer.OhMyPosh"
+    call :check_and_install_tool "git" "Git.Git"
+    call :check_and_install_tool "zoxide" "ajeetdsouza.zoxide"
 )
 echo.
+
+goto :skip_tool_subroutine
+
+:check_and_install_tool
+set "TOOL_EXE=%~1"
+set "TOOL_ID=%~2"
+
+echo [CHECK] Checking tool: %TOOL_EXE%
+where %TOOL_EXE% >nul 2>&1
+if errorlevel 1 (
+    echo [INSTALL] Installing %TOOL_EXE%...
+    winget install %TOOL_ID% --silent --accept-source-agreements --accept-package-agreements >nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] Failed to install %TOOL_EXE% via winget
+        echo [INFO] You may need to install %TOOL_EXE% manually
+    ) else (
+        echo [OK] %TOOL_EXE% installed successfully
+        REM Refresh PATH for current session
+        call :refresh_path
+        REM Verify installation
+        where %TOOL_EXE% >nul 2>&1
+        if errorlevel 1 (
+            echo [INFO] %TOOL_EXE% installed but may require a new session to be available
+        ) else (
+            echo [VERIFY] %TOOL_EXE% is now available
+        )
+    )
+) else (
+    echo [OK] %TOOL_EXE% already available
+    REM Show version if possible
+    %TOOL_EXE% --version >nul 2>&1 && (
+        for /f "tokens=*" %%v in ('%TOOL_EXE% --version 2^>nul ^| head -1') do echo [INFO] Version: %%v
+    )
+)
+exit /b 0
+
+:refresh_path
+REM Refresh environment variables for current session
+for /f "usebackq tokens=2,*" %%A in (`reg query HKCU\Environment /v PATH 2^>nul`) do (
+    if not "%%B"=="" set "PATH=%%B;%PATH%"
+)
+for /f "usebackq tokens=2,*" %%A in (`reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul`) do (
+    if not "%%B"=="" set "PATH=%%B;%PATH%"
+)
+exit /b 0
+
+:skip_tool_subroutine
 
 REM === Download Repository ===
 echo [DOWNLOAD] Downloading PowerShell profile repository...
@@ -366,7 +471,23 @@ if exist "%PS_PROFILE%" (
     goto :error_exit
 )
 
-powershell -NoProfile -Command "try { Get-Module posh-git,Terminal-Icons,PSReadLine -ListAvailable -ErrorAction SilentlyContinue | Out-Null; Write-Host '[OK] Essential modules available' -ForegroundColor Green } catch { Write-Host '[INFO] Some modules may need manual installation' -ForegroundColor Yellow }"
+REM Enhanced verification with detailed module status
+powershell -NoProfile -Command "
+Write-Host '[VERIFY] Checking module availability...' -ForegroundColor Cyan
+$modules = @('PSReadLine', 'posh-git', 'Terminal-Icons')
+$available = 0
+foreach ($module in $modules) {
+    $mod = Get-Module $module -ListAvailable -ErrorAction SilentlyContinue
+    if ($mod) {
+        $version = ($mod | Sort-Object Version -Descending | Select-Object -First 1).Version
+        Write-Host '  [OK]' $module '(' $version ')' -ForegroundColor Green
+        $available++
+    } else {
+        Write-Host '  [MISSING]' $module -ForegroundColor Yellow
+    }
+}
+Write-Host '[INFO] Available modules:' $available 'of' $modules.Count -ForegroundColor Cyan
+"
 echo.
 
 REM === Success ===
@@ -377,7 +498,9 @@ echo ═════════════════════════
 echo.
 echo ✓ Repository downloaded from GitHub
 echo ✓ PowerShell profile configured  
-echo ✓ Essential modules installed
+echo ✓ Essential modules checked/installed
+echo ✓ Required tools verified
+echo ✓ Execution policy verified
 echo ✓ Theme and modules copied
 echo.
 echo [NEXT STEPS]
